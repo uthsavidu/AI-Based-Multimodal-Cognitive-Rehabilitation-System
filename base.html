@@ -1,0 +1,214 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <title>{% block title %}{{ app_name }}{% endblock %}</title>
+
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='css/style.css') }}">
+
+    <style>
+        /* Global page scrolling */
+        html {
+            min-height: 100%;
+            height: auto;
+            overflow-x: hidden;
+            overflow-y: auto;
+            scroll-behavior: auto;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            height: auto;
+            overflow-x: hidden;
+            overflow-y: auto;
+        }
+
+        main.container {
+            height: auto;
+            min-height: 0;
+        }
+
+        /* Allow the completed report to grow naturally */
+        body:has(.clean-report) {
+            height: auto;
+            min-height: 100vh;
+            overflow-y: auto;
+        }
+
+        body:has(.clean-report) main.container,
+        body:has(.clean-report) .test,
+        body:has(.clean-report) .clean-report {
+            height: auto;
+            min-height: 0;
+            max-height: none;
+            overflow: visible;
+        }
+
+        /* Keep wide tables within the report */
+        .report-table-wrap {
+            max-width: 100%;
+            overflow-x: auto;
+        }
+
+        @media (max-width: 700px) {
+            .header-inner {
+                flex-wrap: wrap;
+            }
+
+            .nav {
+                flex-wrap: wrap;
+            }
+
+            .report-hero-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <header class="site-header">
+        <div class="container header-inner">
+            <div class="brand">
+                <div class="brand-mark" aria-hidden="true">+</div>
+
+                <div class="brand-text">
+                    <div class="brand-title">{{ app_name }}</div>
+                    <div class="brand-subtitle">
+                        Care-focused cognitive training
+                    </div>
+                </div>
+            </div>
+
+            <nav class="nav">
+                <a class="nav-link" href="{{ url_for('home') }}">
+                    Home
+                </a>
+
+                {% if session.get('user_id') %}
+                    <a class="nav-link"
+                       href="{{ url_for('dashboard') }}">
+                        Dashboard
+                    </a>
+
+                    <a class="nav-link nav-link-primary"
+                       href="{{ url_for('logout') }}">
+                        Logout
+                    </a>
+                {% else %}
+                    <a class="nav-link"
+                       href="{{ url_for('login') }}">
+                        Login
+                    </a>
+
+                    <a class="nav-link nav-link-primary"
+                       href="{{ url_for('register') }}">
+                        Register
+                    </a>
+                {% endif %}
+            </nav>
+        </div>
+    </header>
+
+    {% if ui_session_id and request.endpoint != 'session_complete' %}
+        <div class="session-runtime-bar" id="session-runtime-bar">
+            <span>Assessment in progress</span>
+
+            <strong id="session-runtime-time">--:--</strong>
+
+            <span id="session-runtime-status">
+                Camera monitoring active on this activity
+            </span>
+        </div>
+    {% endif %}
+
+    <main class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <section class="alerts"
+                         aria-live="polite"
+                         aria-relevant="all">
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                </section>
+            {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="site-footer">
+        <div class="container footer-inner">
+            <span>© {{ year }} {{ app_name }}</span>
+        </div>
+    </footer>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+
+    {% if ui_session_id and request.endpoint != 'session_complete' %}
+        <script>
+            (() => {
+                let remaining = {{ ui_remaining_seconds|default(0)|int }};
+                const sid = {{ ui_session_id|tojson }};
+
+                const timeEl =
+                    document.getElementById('session-runtime-time');
+
+                const statusEl =
+                    document.getElementById('session-runtime-status');
+
+                let timer = null;
+
+                function render() {
+                    const safeRemaining = Math.max(0, remaining);
+                    const minutes = Math.floor(safeRemaining / 60);
+                    const seconds = safeRemaining % 60;
+
+                    if (timeEl) {
+                        timeEl.textContent =
+                            `${String(minutes).padStart(2, '0')}:` +
+                            `${String(seconds).padStart(2, '0')}`;
+                    }
+
+                    if (statusEl && remaining <= 30) {
+                        statusEl.textContent = remaining > 0
+                            ? 'Assessment ending soon'
+                            : 'Assessment complete';
+                    }
+                }
+
+                render();
+
+                if (remaining <= 0) {
+                    window.location.replace(
+                        `/session/${encodeURIComponent(sid)}/complete`
+                    );
+                    return;
+                }
+
+                timer = window.setInterval(() => {
+                    remaining = Math.max(0, remaining - 1);
+                    render();
+
+                    if (remaining <= 0) {
+                        window.clearInterval(timer);
+                        timer = null;
+
+                        window.location.replace(
+                            `/session/${encodeURIComponent(sid)}/complete`
+                        );
+                    }
+                }, 1000);
+            })();
+        </script>
+    {% endif %}
+</body>
+</html>

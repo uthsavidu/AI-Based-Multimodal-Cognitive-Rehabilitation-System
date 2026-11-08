@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Personalized Therapy Session · {{ app_name }}{% endblock %}
+{% block content %}
+<section class="test">
+  <div class="test-card therapy-intro-card">
+    <div class="session-badge">{{ duration_minutes }}-Minute Personalized Training</div>
+    <h1 class="test-title">Your training plan</h1>
+    <p class="test-lead">Your previous performance is used to choose the area that needs the most practice. This is a training recommendation, not a medical diagnosis.</p>
+
+    <div class="therapy-focus">
+      <div>
+        <span class="therapy-label">TODAY'S FOCUS</span>
+        <h2>{{ therapy_plan.activity_name }}</h2>
+        <p><strong>Why:</strong> Your {{ therapy_plan.weakest_area }} performance is currently {{ therapy_plan.weakest_score if therapy_plan.weakest_score is not none else 'not established' }}/100.</p>
+        <p><strong>Training goal:</strong> Improve {{ therapy_plan.focus }}.</p>
+      </div>
+    </div>
+
+    <div class="therapy-steps">
+      {% for step in therapy_plan.steps %}<div class="therapy-step"><span>{{ loop.index }}</span><p>{{ step }}</p></div>{% endfor %}
+    </div>
+
+    <div class="therapy-note"><strong>How this works:</strong> this session covers all four activities, starting with your weakest area. The camera stays active throughout the session for identity and attention monitoring.</div>
+
+    {% if activity_sequence %}
+    <div class="therapy-sequence">
+      <span class="therapy-label">TODAY'S ORDER</span>
+      <ol class="therapy-sequence-list">
+        {% for name in activity_sequence %}<li>{{ name }}</li>{% endfor %}
+      </ol>
+    </div>
+    {% endif %}
+
+    <div class="game-controls">
+      <a class="button button-primary button-lg" href="{{ first_activity_url }}">Start {{ therapy_plan.activity_name }}</a>
+      <a class="button button-secondary" href="{{ url_for('dashboard') }}">Cancel</a>
+    </div>
+  </div>
+</section>
+{% endblock %}

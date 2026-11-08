@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+
+{% block title %}Login · {{ app_name }}{% endblock %}
+
+{% block content %}
+  <section class="auth">
+    <div class="auth-card">
+      <h1 class="auth-title">Login</h1>
+      <p class="auth-lead">Enter your email and password to continue.</p>
+
+      <form class="form" method="post" action="{{ url_for('login') }}">
+        <label class="field">
+          <span class="field-label">Email</span>
+          <input class="input" type="email" name="email" placeholder="you@example.com" autocomplete="email" required />
+        </label>
+
+        <label class="field">
+          <span class="field-label">Password</span>
+          <input class="input" type="password" name="password" placeholder="Enter your password" autocomplete="current-password" required />
+        </label>
+
+        <button class="button button-primary button-lg" type="submit">Sign in</button>
+        <p class="form-hint">
+          New here?
+          <a class="link" href="{{ url_for('register') }}">Create an account</a>
+        </p>
+      </form>
+    </div>
+  </section>
+{% endblock %}
+

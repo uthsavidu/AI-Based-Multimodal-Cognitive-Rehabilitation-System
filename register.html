@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block title %}Register · {{ app_name }}{% endblock %}
+
+{% block content %}
+  <section class="auth">
+    <div class="auth-card">
+      <h1 class="auth-title">Register</h1>
+      <p class="auth-lead">Create your account to begin your guided training sessions.</p>
+
+      <form class="form" method="post" action="{{ url_for('register') }}">
+        <label class="field">
+          <span class="field-label">Full Name</span>
+          <input class="input" type="text" name="full_name" placeholder="John Doe" autocomplete="name" required />
+        </label>
+
+        <label class="field">
+          <span class="field-label">Email</span>
+          <input class="input" type="email" name="email" placeholder="you@example.com" autocomplete="email" required />
+        </label>
+
+        <label class="field">
+          <span class="field-label">Password</span>
+          <input class="input" type="password" name="password" placeholder="Create a strong password" autocomplete="new-password" required />
+        </label>
+
+        <label class="field">
+          <span class="field-label">Age</span>
+          <input class="input" type="number" name="age" placeholder="25" min="1" max="120" inputmode="numeric" />
+        </label>
+
+        <label class="field">
+          <span class="field-label">Gender</span>
+          <select class="input" name="gender">
+            <option value="" selected>Select</option>
+            <option value="Female">Female</option>
+            <option value="Male">Male</option>
+            <option value="Other">Other</option>
+            <option value="Prefer not to say">Prefer not to say</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span class="field-label">Patient Type</span>
+          <select class="input" name="patient_type">
+            <option value="" selected>Select</option>
+            <option value="Stroke">Stroke</option>
+            <option value="Dementia">Dementia</option>
+            <option value="Alzheimer’s">Alzheimer’s</option>
+            <option value="Other">Other</option>
+          </select>
+        </label>
+
+        <button class="button button-primary button-lg" type="submit">Create account</button>
+        <p class="form-hint">
+          Already have an account?
+          <a class="link" href="{{ url_for('login') }}">Login</a>
+        </p>
+      </form>
+    </div>
+  </section>
+{% endblock %}
+

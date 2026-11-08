@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+
+{% block title %}Face Verification · {{ app_name }}{% endblock %}
+
+{% block content %}
+  <section class="test">
+    <div class="test-card enrollment-card">
+      <div class="test-badge">Step 2 of 2 · Secure Login</div>
+      <h1 class="test-title">Face Verification</h1>
+      <p class="test-lead">Hi {{ full_name }}, please verify your face to access your dashboard.</p>
+
+      {% if not has_face_profile %}
+        <p class="enrollment-status error" role="status">
+          No face profile is on file for this account. Please
+          <a class="link" href="{{ url_for('face_enrollment') }}">complete face enrollment</a> first.
+        </p>
+      {% else %}
+        <div class="enrollment-preview-wrap">
+          <video id="camera-preview" autoplay muted playsinline></video>
+          <div id="camera-placeholder">Camera preview will appear here.</div>
+        </div>
+        <canvas id="capture-canvas" hidden></canvas>
+
+        <p id="verify-status" class="enrollment-status" role="status" aria-live="polite">
+          Select Start Camera, then Verify Face.
+        </p>
+
+        <div class="game-controls">
+          <button class="button button-primary" id="start-camera" type="button">Start Camera</button>
+          <button class="button button-primary" id="verify-face" type="button" disabled>Verify Face</button>
+          <button class="button button-secondary" id="stop-camera" type="button" disabled>Stop Camera</button>
+          <a class="button button-secondary" href="{{ url_for('login') }}">Cancel &amp; Back to Login</a>
+        </div>
+      {% endif %}
+    </div>
+  </section>
+
+  <style>
+    .enrollment-card { max-width: 720px; margin: 0 auto; }
+    .enrollment-preview-wrap {
+      position: relative; min-height: 320px; display: grid; place-items: center;
+      overflow: hidden; border: 2px solid var(--border); border-radius: 14px; background: #102a43;
+    }
+    #camera-preview { display: block; width: 100%; max-height: 440px; object-fit: cover; transform: scaleX(-1); }
+    #camera-placeholder { position: absolute; color: #fff; text-align: center; padding: 1rem; }
+    .enrollment-status { min-height: 1.5rem; margin: 1rem 0 0; text-align: center; font-weight: 650; }
+    .enrollment-status.success { color: #065f46; }
+    .enrollment-status.error { color: #991b1b; }
+  </style>
+
+  {% if has_face_profile %}
+  <script>
+    (() => {
+      const video = document.getElementById('camera-preview');
+      const canvas = document.getElementById('capture-canvas');
+      const placeholder = document.getElementById('camera-placeholder');
+      const status = document.getElementById('verify-status');
+      const startButton = document.getElementById('start-camera');
+      const verifyButton = document.getElementById('verify-face');
+      const stopButton = document.getElementById('stop-camera');
+      let stream = null;
+
+      function setStatus(message, type = '') {
+        status.textContent = message;
+        status.className = `enrollment-status ${type}`;
+      }
+
+      function stopCamera() {
+        if (stream) {
+          stream.getTracks().forEach((track) => track.stop());
+          stream = null;
+        }
+        video.srcObject = null;
+        placeholder.hidden = false;
+        verifyButton.disabled = true;
+        stopButton.disabled = true;
+      }
+
+      async function startCamera() {
+        stopCamera();
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          setStatus('This browser does not support camera access.', 'error');
+          return;
+        }
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+          video.srcObject = stream;
+          placeholder.hidden = true;
+          verifyButton.disabled = false;
+          stopButton.disabled = false;
+          setStatus('Position your face clearly in the preview, then verify. Your registered face profile contains multiple samples for better matching.');
+        } catch (_error) {
+          setStatus('Camera access was denied or unavailable.', 'error');
+        }
+      }
+
+      async function verifyFace() {
+        if (!stream || !video.videoWidth) {
+          setStatus('Start the camera before verifying.', 'error');
+          return;
+        }
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+        verifyButton.disabled = true;
+        setStatus('Verifying your identity...');
+
+        try {
+          const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.9));
+          const form = new FormData();
+          form.append('image', blob, 'face-verify.jpg');
+          const response = await fetch('{{ url_for("login_face_verify_check") }}', { method: 'POST', body: form });
+          const result = await response.json();
+          if (!response.ok) throw new Error(result.message || 'Face verification failed. Access denied.');
+          setStatus('Face verified. Redirecting...', 'success');
+          stopCamera();
+          window.location.href = result.redirect || '{{ url_for("dashboard") }}';
+        } catch (error) {
+          verifyButton.disabled = false;
+          setStatus(error.message || 'Face verification failed. Access denied.', 'error');
+        }
+      }
+
+      startButton.addEventListener('click', startCamera);
+      verifyButton.addEventListener('click', verifyFace);
+      stopButton.addEventListener('click', () => {
+        stopCamera();
+        setStatus('Camera stopped.');
+      });
+      window.addEventListener('pagehide', stopCamera);
+    })();
+  </script>
+  {% endif %}
+{% endblock %}

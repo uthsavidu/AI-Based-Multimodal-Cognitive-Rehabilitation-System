@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+{% block title %}Voice Cognitive Training · {{ app_name }}{% endblock %}
+{% block content %}
+<section class="test">
+  {% if session_id %}<div class="session-badge">Personalized Assessment</div>{% endif %}
+  <h1 class="test-title">Voice Cognitive Training</h1>
+  <p class="test-lead">This training improves verbal recall, sentence recall and rapid word retrieval. Follow the prompts and speak naturally.</p>
+
+  <div class="voice-language-picker" style="margin:10px 0 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+    <label for="voice-language-select" style="font-weight:700;font-size:0.85rem;">Language</label>
+    <select id="voice-language-select">
+      {% for code, name in languages.items() %}
+        <option value="{{ code }}" {% if code == language %}selected{% endif %}>{{ name }}</option>
+      {% endfor %}
+    </select>
+    <button class="button" id="voice-speak-instruction" type="button" title="Hear the current instruction">🔊 Hear instruction</button>
+  </div>
+
+  <div id="voice-status" class="activity-instruction-banner">Checking microphone and speech-recognition support...</div>
+
+  <div class="activity-layout voice-training-layout">
+    <div class="test-card voice-game-card">
+      <div class="voice-progress"><span id="voice-progress-text">Level 1 of 3</span><div><i id="voice-progress-bar"></i></div></div>
+
+      <div class="voice-level-panel active" id="level-1-panel">
+        <div class="test-badge">Level 1 · Word Recall</div>
+        <p class="test-lead">Look at the word. Press <strong>Start</strong>, then say the word clearly. Recording stops automatically.</p>
+        <div class="voice-prompt" id="level1-word">{{ level1_word }}</div>
+        <div class="voice-transcript" id="level1-transcript">Ready.</div>
+        <div class="voice-timer" id="level1-timer">Maximum {{ level1_speak_seconds }} seconds</div>
+        <div class="game-controls"><button class="button button-primary" id="level1-start" type="button">Start</button></div>
+        <div class="voice-round-result" id="level1-result" hidden></div>
+        <div class="game-controls" id="level1-next-wrap" hidden><button class="button button-primary" id="level1-next" type="button">Continue</button></div>
+      </div>
+
+      <div class="voice-level-panel" id="level-2-panel">
+        <div class="test-badge">Level 2 · Sentence Recall</div>
+        <p class="test-lead">Read the sentence once. Start recording and repeat it from memory. Recording stops automatically.</p>
+        <div class="voice-prompt voice-prompt-sentence" id="level2-sentence">{{ level2_sentence }}</div>
+        <div class="voice-transcript" id="level2-transcript">Ready.</div>
+        <div class="voice-timer" id="level2-timer">Maximum {{ level2_speak_seconds }} seconds</div>
+        <div class="game-controls"><button class="button button-primary" id="level2-start" type="button">Start</button></div>
+        <div class="voice-round-result" id="level2-result" hidden></div>
+        <div class="game-controls" id="level2-next-wrap" hidden><button class="button button-primary" id="level2-next" type="button">Continue</button></div>
+      </div>
+
+      <div class="voice-level-panel" id="level-3-panel">
+        <div class="test-badge">Level 3 · Rapid Category Naming</div>
+        <p class="test-lead">Name as many <strong id="level3-category-label">{{ level3_category }}</strong> as possible. You have {{ level3_speak_seconds }} seconds per round.</p>
+        <div class="voice-countdown" id="level3-countdown" hidden></div>
+        <div class="voice-timer" id="level3-timer" hidden></div>
+        <div class="voice-transcript" id="level3-transcript">Ready.</div>
+        <div class="game-controls"><button class="button button-primary" id="level3-start" type="button">Start Round</button></div>
+        <div class="voice-round-result" id="level3-result" hidden></div>
+        <div class="game-controls" id="level3-next-wrap" hidden><button class="button button-primary" id="level3-next" type="button">Next Round</button></div>
+        <div class="voice-round-result" id="level3-trend" hidden></div>
+        <div class="game-controls" id="level3-finish-wrap" hidden><button class="button button-primary" id="level3-finish" type="button">View Full Results</button></div>
+      </div>
+    </div>
+    <div id="webcam-panel"></div>
+  </div>
+</section>
+
+<script src="{{ url_for('static', filename='js/voice-recorder.js') }}"></script>
+<script src="{{ url_for('static', filename='js/webcam-monitor.js') }}"></script>
+<script>
+(() => {
+  const sessionId={{ (session_id or '')|tojson }};
+  const saveUrl={{ url_for('save_voice_result')|tojson }};
+  const levels={prep:{{ level3_prep_seconds }}, speak:{{ level3_speak_seconds }}, rounds:{{ level3_rounds }}};
+  const level1Seconds={{ level1_speak_seconds }}, level2Seconds={{ level2_speak_seconds }};
+  let language={{ language|tojson }};
+  let speechLocale={{ speech_locale|tojson }};
+  let level3CategoryKey={{ level3_category_key|tojson }};
+  let recorder1=null,recorder2=null,recorder3=null,currentRound=1;
+  const $=id=>document.getElementById(id);
+  const status=$('voice-status');
+  function setStatus(t,good=false){status.textContent=t;status.className='activity-instruction-banner '+(good?'voice-ok':'');}
+  function show(id,n){document.querySelectorAll('.voice-level-panel').forEach(x=>x.classList.remove('active'));$(id).classList.add('active');$('voice-progress-text').textContent=`Level ${n} of 3`;$('voice-progress-bar').style.width=`${n*33.333}%`;}
+  async function save(payload){const r=await fetch(saveUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session_id:sessionId,language,...payload})});let d={};try{d=await r.json();}catch(e){}if(!r.ok)throw new Error(d.message||'Unable to save voice result.');return d.result||{};}
+  function countdown(el,seconds){return new Promise(resolve=>{let n=seconds;el.hidden=false;el.textContent=n;const t=setInterval(()=>{n--;if(n<=0){clearInterval(t);el.hidden=true;resolve();}else el.textContent=n;},1000);});}
+  async function record(rec,seconds,timer){timer.hidden=false;const started=performance.now();while(performance.now()-started<seconds*1000){const remaining=Math.max(0,seconds-Math.floor((performance.now()-started)/1000));timer.textContent=`${remaining}s remaining`;await new Promise(r=>setTimeout(r,100));}timer.hidden=true;return await rec.stop();}
+
+  // --- Language selector: reloads the page with the chosen language so
+  // every prompt (word/sentence/category) and the speech-recognition
+  // locale are generated server-side in that language. ---
+  const languageSelect=$('voice-language-select');
+  if(languageSelect){
+    languageSelect.addEventListener('change',()=>{
+      const params=new URLSearchParams(window.location.search);
+      params.set('lang',languageSelect.value);
+      if(sessionId)params.set('session_id',sessionId);
+      window.location.search=params.toString();
+    });
+  }
+
+  // --- Spoken instructions / prompts / responses in the selected language,
+  // using the browser's built-in speech synthesis where supported. ---
+  function speak(text){
+    if(!text||!window.speechSynthesis)return;
+    try{
+      window.speechSynthesis.cancel();
+      const utter=new SpeechSynthesisUtterance(text);
+      utter.lang=speechLocale;
+      window.speechSynthesis.speak(utter);
+    }catch(_e){/* speech synthesis not available -- ignore */}
+  }
+  const speakButton=$('voice-speak-instruction');
+  if(speakButton){
+    speakButton.onclick=()=>{
+      const activePanel=document.querySelector('.voice-level-panel.active');
+      if(!activePanel)return;
+      const prompt=activePanel.querySelector('.voice-prompt')||activePanel.querySelector('.test-lead');
+      speak(prompt?prompt.textContent.trim():'');
+    };
+    if(!window.speechSynthesis){speakButton.disabled=true;speakButton.title='Spoken instructions are not supported in this browser.';}
+  }
+
+  if(!window.VoiceRecorder||!VoiceRecorder.isSupported()){setStatus('Speech recognition is unavailable. Please open this page in Chrome or Edge and allow microphone access.');$('level1-start').disabled=$('level2-start').disabled=$('level3-start').disabled=true;return;}
+  setStatus('Microphone ready. Start Level 1 when you are ready.',true);
+
+  let monitor=null;
+  if($('webcam-panel')){monitor=new WebcamMonitor({containerEl:$('webcam-panel'),sessionId,userName:{{ session.get('full_name', 'User')|tojson }},initialFlagCount:{{ ui_flag_count|default(0)|tojson }},onLimitReached:()=>{[recorder1,recorder2,recorder3].forEach(r=>{if(r)try{r.stop()}catch(e){}})}});monitor.start();window.addEventListener('pagehide',()=>monitor.stop());}
+
+  $('level1-start').onclick=async()=>{const b=$('level1-start');b.disabled=true;$('level1-transcript').textContent='Listening...';setStatus('Speak the displayed word now.');recorder1=new VoiceRecorder({lang:speechLocale,onResult:x=>{$('level1-transcript').textContent=x.finalText||x.interimText||'Listening...';},onError:e=>{$('level1-transcript').textContent=e;}});if(!await recorder1.start()){b.disabled=false;return;}const out=await record(recorder1,level1Seconds,$('level1-timer'));try{const r=await save({level:1,round_number:1,task_type:'Level 1 - Word Recall',expected_text:$('level1-word').textContent.trim(),recognized_text:out.recognizedText,response_time_ms:out.responseTimeMs,speech_duration_ms:out.speechDurationMs,pause_count:out.pauseCount,pause_duration_ms:out.pauseDurationMs});$('level1-result').hidden=false;$('level1-result').innerHTML=r.correct?`<strong>Correct.</strong> Recall was successful. Response time: ${(r.response_time_ms||out.responseTimeMs)} ms.`:`<strong>Not matched.</strong> I heard: “${out.recognizedText||'nothing'}”. Response time: ${(r.response_time_ms||out.responseTimeMs)} ms. Try again.`;$('level1-next-wrap').hidden=false;}catch(e){setStatus(e.message);b.disabled=false;}};
+  $('level1-next').onclick=()=>show('level-2-panel',2);
+
+  $('level2-start').onclick=async()=>{const b=$('level2-start');b.disabled=true;$('level2-transcript').textContent='Listening...';setStatus('Repeat the sentence now.');recorder2=new VoiceRecorder({lang:speechLocale,onResult:x=>{$('level2-transcript').textContent=x.finalText||x.interimText||'Listening...';},onError:e=>{$('level2-transcript').textContent=e;}});if(!await recorder2.start()){b.disabled=false;return;}const out=await record(recorder2,level2Seconds,$('level2-timer'));try{const r=await save({level:2,round_number:1,task_type:'Level 2 - Sentence Recall',expected_text:$('level2-sentence').textContent.trim(),recognized_text:out.recognizedText,response_time_ms:out.responseTimeMs,speech_duration_ms:out.speechDurationMs,pause_count:out.pauseCount,pause_duration_ms:out.pauseDurationMs});$('level2-result').hidden=false;$('level2-result').innerHTML=`<strong>Recall ${Number(r.recall_accuracy??0).toFixed(1)}%.</strong> Missing ${r.missing_words??0} word(s) · Extra ${r.extra_words??0} · Response ${(r.response_time_ms||out.responseTimeMs)} ms.`;$('level2-next-wrap').hidden=false;}catch(e){setStatus(e.message);b.disabled=false;}};
+  $('level2-next').onclick=()=>show('level-3-panel',3);
+
+  async function runRound(){const b=$('level3-start');b.disabled=true;
+    if(currentRound>1){try{const pr=await fetch(`/voice-game/next-round?level=3&round=${currentRound}&lang=${encodeURIComponent(language)}`);if(pr.ok){const pd=await pr.json();if(pd.category)level3CategoryKey=pd.category;if(pd.label)$('level3-category-label').textContent=pd.label;}}catch(e){console.warn('Could not refresh category prompt:',e);}}$('level3-result').hidden=true;$('level3-next-wrap').hidden=true;setStatus(`Round ${currentRound}: prepare your category words.`);await countdown($('level3-countdown'),levels.prep);$('level3-transcript').textContent='Listening...';recorder3=new VoiceRecorder({lang:speechLocale,onResult:x=>{$('level3-transcript').textContent=x.finalText||x.interimText||'Listening...';},onError:e=>{$('level3-transcript').textContent=e;}});if(!await recorder3.start()){b.disabled=false;return;}const out=await record(recorder3,levels.speak,$('level3-timer'));try{const r=await save({level:3,round_number:currentRound,task_type:'Level 3 - Category Word Generation',category:level3CategoryKey,recognized_text:out.recognizedText,response_time_ms:out.responseTimeMs,speech_duration_ms:out.speechDurationMs,pause_count:out.pauseCount,pause_duration_ms:out.pauseDurationMs});$('level3-result').hidden=false;$('level3-result').innerHTML=`<strong>${r.valid_word_count??0} valid words</strong> · ${r.unique_words??0} unique · ${r.repeated_words??0} repeated · ${r.filler_count??0} filler words · ${(r.speech_rate??0).toFixed(1)} words/min.`;if(currentRound<levels.rounds){$('level3-next-wrap').hidden=false;}else{$('level3-trend').hidden=false;$('level3-trend').textContent=`Trend: ${r.trend||'Completed'}`;$('level3-finish-wrap').hidden=false;}}catch(e){setStatus(e.message);b.disabled=false;}}
+  $('level3-start').onclick=runRound;$('level3-next').onclick=()=>{currentRound++;$('level3-start').disabled=false;runRound();};
+  const finishButton=$('level3-finish');
+  if(finishButton){
+    finishButton.onclick=async()=>{
+      finishButton.disabled=true;
+      if(window.voiceCursorMonitor) await window.voiceCursorMonitor.save('Voice Cognitive Game',sessionId);
+      if(monitor) await monitor.stop();
+      window.location.href={{ next_url|tojson }};
+    };
+  }
+
+})();
+</script>
+<script src="{{ url_for('static', filename='js/cursor-monitor.js') }}"></script>
+<script>
+(() => { const sid={{ (session_id or '')|tojson }}; const root=document.querySelector('.voice-game-card'); if(!root||!window.CursorMonitor)return; const cm=new CursorMonitor(root); cm.start(); window.addEventListener('pagehide',()=>{cm.save('Voice Cognitive Game',sid);cm.stop();}); window.voiceCursorMonitor=cm; })();
+</script>
+{% endblock %}

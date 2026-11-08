@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block title %}Home · {{ app_name }}{% endblock %}
+
+{% block content %}
+  <section class="hero">
+    <div class="hero-card">
+      <div class="hero-badge">Healthcare • Rehab • AI</div>
+      <h1 class="hero-title">Support cognitive recovery with guided training</h1>
+      <p class="hero-lead">
+        A clean starting point to build a patient-friendly cognitive rehabilitation system.
+        Add exercises, assessments, and progress dashboards as you grow the app.
+      </p>
+      <div class="hero-actions">
+        <a class="button button-primary button-lg" href="{{ url_for('login') }}">Start</a>
+        <a class="button button-secondary" href="{{ url_for('register') }}">Create account</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="strip">
+    <div class="strip-item">
+      <div class="strip-kpi">5–10 min</div>
+      <div class="strip-label">Daily sessions</div>
+    </div>
+    <div class="strip-item">
+      <div class="strip-kpi">Personalized</div>
+      <div class="strip-label">Difficulty & pacing</div>
+    </div>
+    <div class="strip-item">
+      <div class="strip-kpi">Secure</div>
+      <div class="strip-label">Designed for health data</div>
+    </div>
+  </section>
+
+  <section class="grid">
+    {% for item in features %}
+      <article class="card">
+        <h2 class="card-title">{{ item.title }}</h2>
+        <p class="card-desc">{{ item.desc }}</p>
+      </article>
+    {% endfor %}
+  </section>
+{% endblock %}
+

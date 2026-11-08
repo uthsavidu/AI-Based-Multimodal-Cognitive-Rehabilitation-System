@@ -1,0 +1,569 @@
+{% extends "base.html" %}
+
+{% block title %}Memory Test · {{ app_name }}{% endblock %}
+
+{% block content %}
+  <section class="test">
+    {% if session_id %}<div class="session-badge">Assessment</div>{% endif %}
+    {% if instruction %}<div class="activity-instruction-banner">{{ instruction }}</div>{% endif %}
+    <div class="activity-layout">
+    <div class="test-card">
+      <div class="test-badge">Assessment</div>
+      <h1 class="test-title">Memory Test</h1>
+      <p class="test-lead">Watch the sequence, then click the numbers in the same order!</p>
+
+      <!-- Progress Bar -->
+      <div class="progress-section">
+        <div class="progress-bar">
+          <div class="progress-fill" id="progress-fill"></div>
+        </div>
+        <div class="progress-label">Level <span id="level-progress">1</span>/10</div>
+      </div>
+
+      <!-- Game Stats -->
+      <div class="game-stats">
+        <div class="stat-box">
+          <div class="stat-icon">🎮</div>
+          <div class="stat-info">
+            <div class="stat-label">LEVEL</div>
+            <div class="stat-value" id="level">1</div>
+          </div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-icon">⏱️</div>
+          <div class="stat-info">
+            <div class="stat-label">TIME</div>
+            <div class="stat-value" id="timer">00:00</div>
+          </div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-icon">👆</div>
+          <div class="stat-info">
+            <div class="stat-label">MOVES</div>
+            <div class="stat-value" id="moves">0</div>
+          </div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-icon">⭐</div>
+          <div class="stat-info">
+            <div class="stat-label">MEMORY SCORE</div>
+            <div class="stat-value" id="score">0.00</div>
+          </div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-icon">✓</div>
+          <div class="stat-info">
+            <div class="stat-label">CORRECT</div>
+            <div class="stat-value" id="correct">0</div>
+          </div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-icon">✕</div>
+          <div class="stat-info">
+            <div class="stat-label">WRONG</div>
+            <div class="stat-value" id="wrong">0</div>
+          </div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-icon">📈</div>
+          <div class="stat-info">
+            <div class="stat-label">ACCURACY</div>
+            <div class="stat-value" id="accuracy">0.00%</div>
+          </div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-icon">🧠</div>
+          <div class="stat-info">
+            <div class="stat-label">MAX SEQ</div>
+            <div class="stat-value" id="max-sequence">0</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Controls -->
+      <div class="game-controls">
+        <button class="button button-primary button-lg" id="start-btn" onclick="startGame()">Start Test</button>
+        <button class="button button-secondary" id="restart-btn" onclick="restartGame()" style="display:none;">Restart Game</button>
+        <button class="button button-secondary" id="save-btn" onclick="saveScore()" style="display:none;">Save Score</button>
+        <a class="button button-secondary" href="{{ url_for('dashboard') }}">Back to Dashboard</a>
+      </div>
+
+      <!-- Sequence Display -->
+      <div class="sequence-container">
+        <div class="sequence-label">📝 Memorize this sequence:</div>
+        <div class="sequence-display" id="sequence-display">
+          <div class="color-tile" id="tile-0" style="background: #fbbf24;">Yellow</div>
+          <div class="color-tile" id="tile-1" style="background: #ec4899;">Pink</div>
+          <div class="color-tile" id="tile-2" style="background: #3b82f6;">Blue</div>
+        </div>
+      </div>
+
+      <!-- Number Grid -->
+      <div class="number-grid">
+        <button class="number-tile" data-number="1">1</button>
+        <button class="number-tile" data-number="2">2</button>
+        <button class="number-tile" data-number="3">3</button>
+        <button class="number-tile" data-number="4">4</button>
+        <button class="number-tile" data-number="5">5</button>
+        <button class="number-tile" data-number="6">6</button>
+        <button class="number-tile" data-number="7">7</button>
+        <button class="number-tile" data-number="8">8</button>
+        <button class="number-tile" data-number="9">9</button>
+      </div>
+
+      <!-- Game Status -->
+      <div id="game-status" class="game-status"></div>
+    </div>
+    <div id="webcam-panel"></div>
+    </div>
+  </section>
+
+  <style>
+    .progress-section {
+      margin-bottom: 2rem;
+    }
+
+    .progress-bar {
+      width: 100%;
+      height: 12px;
+      background: #e5e7eb;
+      border-radius: 10px;
+      overflow: hidden;
+      margin-bottom: 0.5rem;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #3b82f6, #0ea5e9);
+      width: 10%;
+      transition: width 0.3s ease;
+    }
+
+    .progress-label {
+      text-align: right;
+      font-size: 0.875rem;
+      color: #6b7280;
+      font-weight: 600;
+    }
+
+    .game-stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 1rem;
+      margin: 2rem 0;
+    }
+
+    .stat-box {
+      background: white;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .stat-icon {
+      font-size: 1.5rem;
+      min-width: 30px;
+    }
+
+    .stat-info {
+      flex: 1;
+    }
+
+    .stat-label {
+      font-size: 0.625rem;
+      font-weight: 700;
+      color: #9ca3af;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 0.25rem;
+    }
+
+    .stat-value {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: #1f2937;
+    }
+
+    .sequence-container {
+      background: #eff6ff;
+      border: 2px solid #0ea5e9;
+      border-radius: 12px;
+      padding: 2rem;
+      margin: 2rem 0;
+      text-align: center;
+    }
+
+    .sequence-label {
+      font-size: 0.875rem;
+      color: #1f2937;
+      font-weight: 600;
+      margin-bottom: 1rem;
+    }
+
+    .sequence-display {
+      display: flex;
+      justify-content: center;
+      gap: 2rem;
+      flex-wrap: wrap;
+      min-height: 100px;
+      align-items: center;
+    }
+
+    .color-tile {
+      width: 100px;
+      height: 100px;
+      border-radius: 16px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      padding-bottom: 12px;
+      font-weight: 700;
+      color: white;
+      font-size: 0.875rem;
+      letter-spacing: 0.5px;
+    }
+
+    .color-tile.active {
+      transform: scale(1.15);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+    }
+
+    .number-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1.5rem;
+      margin: 2rem 0;
+    }
+
+    .number-tile {
+      aspect-ratio: 1;
+      border: 2px solid #e5e7eb;
+      border-radius: 8px;
+      font-size: 2rem;
+      font-weight: 700;
+      background: white;
+      color: #3b82f6;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .number-tile:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+
+    .number-tile:active {
+      transform: translateY(0);
+    }
+
+    .number-tile.active {
+      background: #3b82f6;
+      color: white;
+      box-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
+    }
+
+    .number-tile:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .game-controls {
+      display: flex;
+      gap: 1rem;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin: 2rem 0;
+    }
+
+    .game-status {
+      margin-top: 1rem;
+      padding: 1rem;
+      border-radius: 8px;
+      text-align: center;
+      font-weight: 600;
+      min-height: 40px;
+      display: none;
+    }
+
+    .game-status.show {
+      display: block;
+    }
+
+    .game-status.success {
+      background: #d1fae5;
+      color: #065f46;
+    }
+
+    .game-status.error {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+
+    @media (max-width: 768px) {
+      .number-grid {
+        gap: 1rem;
+      }
+
+      .sequence-display {
+        gap: 1rem;
+      }
+
+      .color-box {
+        width: 60px;
+        height: 60px;
+      }
+
+      .game-stats {
+        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      }
+    }
+  </style>
+
+  <script>
+    let sequence = [];
+    let userSequence = [];
+    let level = 1;
+    let score = 0;
+    let gameActive = false;
+    let isPlayingSequence = false;
+    let moves = 0;
+    let correct = 0;
+    let wrong = 0;
+    let maxSequenceLength = 0;
+    let maximumLevelCompleted = 0;
+    let gameStartTime;
+    let timerInterval;
+    let sequenceColors = ['#fbbf24', '#ec4899', '#3b82f6'];
+
+    function calculateMemoryPerformanceScore(currentMaxLevel, correctCount, wrongCount) {
+      const totalResponses = correctCount + wrongCount;
+      const accuracy = totalResponses > 0 ? (correctCount / totalResponses) * 100 : 0;
+      const memorySpanScore = (currentMaxLevel / 10) * 70;
+      const accuracyScore = accuracy * 0.30;
+      return Math.min(100, Math.max(0, memorySpanScore + accuracyScore));
+    }
+
+    function updateTimer() {
+      const elapsed = Math.floor((Date.now() - gameStartTime) / 1000);
+      const minutes = Math.floor(elapsed / 60);
+      const seconds = elapsed % 60;
+      document.getElementById('timer').textContent = 
+        `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+    }
+
+    function startGame() {
+      sequence = [];
+      userSequence = [];
+      level = 1;
+      score = 0;
+      moves = 0;
+      correct = 0;
+      wrong = 0;
+      maxSequenceLength = 0;
+      maximumLevelCompleted = 0;
+      gameActive = true;
+      gameStartTime = Date.now();
+      
+      timerInterval = setInterval(updateTimer, 100);
+      
+      document.getElementById('start-btn').style.display = 'none';
+      document.getElementById('restart-btn').style.display = 'inline-block';
+      document.getElementById('save-btn').style.display = 'none';
+      document.getElementById('game-status').classList.remove('show');
+      
+      updateDisplay();
+      nextRound();
+    }
+
+    function nextRound() {
+      if (level > 10) {
+        endGame(true);
+        return;
+      }
+
+      userSequence = [];
+      const nextNumber = Math.floor(Math.random() * 3);
+      sequence.push(nextNumber);
+      
+      setTimeout(() => {
+        playSequence();
+      }, 1000);
+    }
+
+    function playSequence() {
+      isPlayingSequence = true;
+      let delay = 0;
+      
+      sequence.forEach((num) => {
+        setTimeout(() => {
+          highlightColor(num);
+        }, delay);
+        delay += 600;
+      });
+      
+      setTimeout(() => {
+        isPlayingSequence = false;
+        enableTiles();
+      }, delay);
+    }
+
+    function highlightColor(index) {
+      const colorTile = document.querySelectorAll('.color-tile')[index];
+      colorTile.classList.add('active');
+      setTimeout(() => {
+        colorTile.classList.remove('active');
+      }, 400);
+    }
+
+    function enableTiles() {
+      document.querySelectorAll('.number-tile').forEach(tile => {
+        tile.disabled = false;
+      });
+    }
+
+    function disableTiles() {
+      document.querySelectorAll('.number-tile').forEach(tile => {
+        tile.disabled = true;
+      });
+    }
+
+    document.querySelectorAll('.number-tile').forEach(tile => {
+      tile.addEventListener('click', function() {
+        if (!gameActive || isPlayingSequence) return;
+        
+        const number = parseInt(this.dataset.number) - 1;
+        const correctIndex = sequence[userSequence.length];
+        
+        moves++;
+        
+        this.classList.add('active');
+        setTimeout(() => {
+          this.classList.remove('active');
+        }, 200);
+        
+        if (number === correctIndex) {
+          correct++;
+          userSequence.push(number);
+
+          if (userSequence.length === sequence.length) {
+            maximumLevelCompleted = Math.max(maximumLevelCompleted, level);
+            maxSequenceLength = Math.max(maxSequenceLength, sequence.length);
+            score = calculateMemoryPerformanceScore(maximumLevelCompleted, correct, wrong);
+            disableTiles();
+            showStatus('✓ Correct! Next level...', 'success');
+
+            setTimeout(() => {
+              level++;
+              nextRound();
+            }, 1500);
+          }
+        } else {
+          wrong++;
+          score = calculateMemoryPerformanceScore(maximumLevelCompleted, correct, wrong);
+          endGame(false);
+        }
+
+        updateDisplay();
+      });
+    });
+
+    function endGame(success) {
+      gameActive = false;
+      disableTiles();
+      clearInterval(timerInterval);
+      
+      if (!success) {
+        showStatus('✗ Wrong! Game Over', 'error');
+      }
+      
+      document.getElementById('restart-btn').style.display = 'inline-block';
+      document.getElementById('save-btn').style.display = 'inline-block';
+    }
+
+    function restartGame() {
+      startGame();
+    }
+
+    function showStatus(message, type) {
+      const status = document.getElementById('game-status');
+      status.textContent = message;
+      status.className = `game-status show ${type}`;
+    }
+
+    function updateDisplay() {
+      const totalResponses = correct + wrong;
+      const accuracy = totalResponses > 0 ? (correct / totalResponses) * 100 : 0;
+      score = calculateMemoryPerformanceScore(maximumLevelCompleted, correct, wrong);
+      document.getElementById('level').textContent = level;
+      document.getElementById('level-progress').textContent = level;
+      document.getElementById('score').textContent = score.toFixed(2);
+      document.getElementById('moves').textContent = moves;
+      document.getElementById('correct').textContent = correct;
+      document.getElementById('wrong').textContent = wrong;
+      document.getElementById('accuracy').textContent = `${accuracy.toFixed(2)}%`;
+      document.getElementById('max-sequence').textContent = Math.max(maxSequenceLength, maximumLevelCompleted);
+
+      const progress = (level / 10) * 100;
+      document.getElementById('progress-fill').style.width = progress + '%';
+    }
+
+    async function saveScore() {
+      const elapsed = Math.floor((Date.now() - gameStartTime) / 1000);
+      const totalResponses = correct + wrong;
+      const accuracy = totalResponses > 0 ? (correct / totalResponses) * 100 : 0;
+      const finalMaximumLevel = Math.max(maximumLevelCompleted, level - 1);
+      const finalMaximumSequenceLength = Math.max(maxSequenceLength, finalMaximumLevel);
+      const finalScore = calculateMemoryPerformanceScore(finalMaximumLevel, correct, wrong);
+
+      const form = document.createElement('form');
+      form.method = 'POST';
+      form.action = '{{ url_for("save_memory_test") }}';
+
+      form.innerHTML = `
+        <input type="hidden" name="score" value="${finalScore}">
+        <input type="hidden" name="memory_performance_score" value="${finalScore}">
+        <input type="hidden" name="level" value="${level}">
+        <input type="hidden" name="maximum_level_completed" value="${finalMaximumLevel}">
+        <input type="hidden" name="maximum_sequence_length" value="${finalMaximumSequenceLength}">
+        <input type="hidden" name="correct_responses" value="${correct}">
+        <input type="hidden" name="wrong_responses" value="${wrong}">
+        <input type="hidden" name="total_responses" value="${totalResponses}">
+        <input type="hidden" name="accuracy" value="${accuracy}">
+        <input type="hidden" name="time_taken" value="${elapsed}">
+        <input type="hidden" name="correct_answers" value="${correct}">
+        <input type="hidden" name="total_attempts" value="${totalResponses}">
+        <input type="hidden" name="session_id" value="${sessionId || ''}">
+      `;
+
+      document.body.appendChild(form);
+      if (webcamMonitor) webcamMonitor.stop();
+      form.submit();
+    }
+  </script>
+
+  <script src="{{ url_for('static', filename='js/webcam-monitor.js') }}"></script>
+  <script>
+    const sessionId = {{ (session_id or '') | tojson }};
+    let webcamMonitor = null;
+    const webcamPanelEl = document.getElementById('webcam-panel');
+    if (webcamPanelEl) {
+      webcamMonitor = new WebcamMonitor({ containerEl: webcamPanelEl, sessionId, userName: {{ session.get("full_name", "User")|tojson }}, initialFlagCount: {{ ui_flag_count|default(0)|tojson }} });
+      webcamMonitor.start();
+      window.addEventListener('pagehide', () => webcamMonitor.stop());
+    }
+  </script>
+<script src="{{ url_for('static', filename='js/cursor-monitor.js') }}"></script>
+<script>
+(() => { const sid={{ (session_id or '')|tojson }}; const root=document.querySelector('.number-grid'); if(!root||!window.CursorMonitor)return; const cm=new CursorMonitor(root); cm.start();
+  root.addEventListener('click',(e)=>{ const target=e.target.closest('button'); if(!target)return; const before=target.classList.contains('is-matched'); setTimeout(()=>{ const correct=target.classList.contains('is-matched')&&!before; cm.recordClick(correct); },20); });
+  const observer=new MutationObserver(()=>{ root.querySelectorAll('button').forEach(btn=>{ if(!btn.dataset.cursorMarked&&!btn.disabled){btn.dataset.cursorMarked='1';cm.markTargetShown();} }); }); observer.observe(root,{childList:true,subtree:true}); setTimeout(()=>observer.takeRecords(),0); window.addEventListener('pagehide',()=>{observer.disconnect();cm.save('Memory Test',sid);cm.stop();}); window.cursorMonitor=cm;
+})();
+</script>
+
+{% endblock %}
+

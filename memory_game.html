@@ -1,0 +1,688 @@
+{% extends "base.html" %}
+
+{% block title %}Memory Match Game · {{ app_name }}{% endblock %}
+
+{% block content %}
+  <section class="test">
+    {% if session_id %}<div class="session-badge">Assessment</div>{% endif %}
+    {% if instruction %}<div class="activity-instruction-banner">{{ instruction }}</div>{% endif %}
+    <div class="activity-layout">
+    <div class="test-card memory-wrap">
+      <div class="test-badge">Game</div>
+      <h1 class="test-title">Memory Match Game</h1>
+      <p class="test-lead">
+        A cognitive rehabilitation exercise for attention and visual memory.
+        Find all matching pairs—unmatched cards flip back after 1 second.
+      </p>
+
+      <div class="memory-toolbar" role="status" aria-live="polite">
+        <div class="memory-controls">
+          <label class="memory-field">
+            <span class="memory-field-label">Difficulty</span>
+            <select class="memory-select" id="difficulty" aria-label="Choose difficulty">
+              <option value="12" selected>12 cards (6 pairs) · Recommended</option>
+              <option value="8">8 cards (4 pairs)</option>
+              <option value="16">16 cards (8 pairs)</option>
+            </select>
+          </label>
+
+          <div class="memory-stats" aria-label="Game stats">
+            <div class="memory-stat"><span class="memory-stat-label">Time</span> <span id="time">00:00</span></div>
+            <div class="memory-stat"><span class="memory-stat-label">Moves</span> <span id="moves">0</span></div>
+            <div class="memory-stat"><span class="memory-stat-label">Matches</span> <span id="matches">0</span>/<span id="pairsTotal">6</span></div>
+            <div class="memory-stat"><span class="memory-stat-label">Wrong</span> <span id="wrong">0</span></div>
+            <div class="memory-stat"><span class="memory-stat-label">Accuracy</span> <span id="accuracy">0%</span></div>
+            <div class="memory-stat"><span class="memory-stat-label">Memory Match Score</span> <span id="score">0.0/100</span></div>
+          </div>
+        </div>
+
+        <div class="memory-actions">
+          <button class="button button-primary" type="button" id="restart">Restart Game</button>
+          <button class="button button-secondary" type="button" id="saveBtn" disabled>Save Score</button>
+          <a class="button button-secondary" href="{{ url_for('dashboard') }}">Back to Dashboard</a>
+        </div>
+      </div>
+
+      <div class="memory-feedback" id="feedback" aria-live="polite"></div>
+
+      <div class="memory-board" id="board" aria-label="Memory cards grid"></div>
+
+      <form id="saveForm" method="post" action="{{ url_for('save_memory_game') }}" style="display:none;">
+        <input type="hidden" name="game_session_id" id="saveSessionId" value="" />
+        <input type="hidden" name="session_id" value="{{ session_id or '' }}" />
+        <input type="hidden" name="difficulty" id="saveDifficulty" value="12" />
+        <input type="hidden" name="number_of_cards" id="saveCards" value="12" />
+        <input type="hidden" name="number_of_pairs" id="savePairs" value="6" />
+        <input type="hidden" name="completion_time_seconds" id="saveCompletionTime" value="0" />
+        <input type="hidden" name="total_moves" id="saveTotalMoves" value="0" />
+        <input type="hidden" name="successful_matches" id="saveSuccessfulMatches" value="0" />
+        <input type="hidden" name="total_pairs" id="saveTotalPairs" value="6" />
+        <input type="hidden" name="accuracy" id="saveAccuracy" value="0" />
+        <input type="hidden" name="move_efficiency" id="saveMoveEfficiency" value="0" />
+        <input type="hidden" name="time_efficiency" id="saveTimeEfficiency" value="0" />
+        <input type="hidden" name="time_per_pair" id="saveTimePerPair" value="0" />
+        <input type="hidden" name="score" id="saveScore" value="0" />
+        <input type="hidden" name="time_taken_seconds" id="saveTime" value="0" />
+        <input type="hidden" name="moves" id="saveMoves" value="0" />
+        <input type="hidden" name="correct_matches" id="saveCorrect" value="0" />
+        <input type="hidden" name="wrong_attempts" id="saveWrong" value="0" />
+      </form>
+
+      <div class="modal" id="modal" hidden aria-hidden="true">
+        <div class="modal-backdrop" data-close="true"></div>
+        <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+          <div class="modal-badge">Completed</div>
+          <h2 class="modal-title" id="modalTitle">Congratulations! Memory Test Completed</h2>
+          <p class="modal-subtitle">Here is your performance summary.</p>
+
+          <div class="modal-grid" aria-label="Final results">
+            <div class="modal-item">
+              <div class="modal-label">Memory Match Score</div>
+              <div class="modal-value" id="finalScore">0.0/100</div>
+            </div>
+            <div class="modal-item">
+              <div class="modal-label">Accuracy</div>
+              <div class="modal-value" id="finalAccuracy">0%</div>
+            </div>
+            <div class="modal-item">
+              <div class="modal-label">Total Time Taken</div>
+              <div class="modal-value" id="finalTime">00:00</div>
+            </div>
+            <div class="modal-item">
+              <div class="modal-label">Baseline Status</div>
+              <div class="modal-value" id="finalBaseline">Baseline not established</div>
+            </div>
+            <div class="modal-item">
+              <div class="modal-label">Compared with Baseline</div>
+              <div class="modal-value" id="finalTrend">Baseline not established</div>
+            </div>
+          </div>
+
+          <div class="modal-actions">
+            <button class="button button-primary" type="button" id="modalRestart">Restart</button>
+            <button class="button button-secondary" type="button" id="modalSave">Save Score</button>
+            <a class="button button-secondary" href="{{ url_for('dashboard') }}">Back to Dashboard</a>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="webcam-panel"></div>
+    </div>
+  </section>
+
+  <style>
+    .memory-wrap { padding-bottom: 22px; }
+    .memory-toolbar {
+      margin-top: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      padding: 12px 12px;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.75);
+    }
+    .memory-controls { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
+    .memory-field { display: grid; gap: 6px; }
+    .memory-field-label { font-size: 13px; color: var(--muted); font-weight: 700; }
+    .memory-select {
+      height: 40px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 0 12px;
+      background: rgba(255, 255, 255, 0.85);
+      font-weight: 650;
+      color: var(--text);
+    }
+    .memory-stats { display: flex; gap: 10px; flex-wrap: wrap; }
+    .memory-stat {
+      border: 1px solid var(--border);
+      background: rgba(14, 165, 233, 0.06);
+      border-radius: 14px;
+      padding: 8px 10px;
+      font-weight: 750;
+    }
+    .memory-stat-label { color: var(--muted); font-weight: 650; margin-right: 8px; }
+    .memory-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+    .memory-board {
+      margin-top: 16px;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    @media (max-width: 560px) {
+      .memory-board { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+
+    .memory-feedback {
+      margin-top: 10px;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.70);
+      border-radius: 14px;
+      padding: 10px 12px;
+      min-height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      color: var(--muted);
+      font-weight: 700;
+    }
+    .memory-feedback strong { color: var(--text); }
+    .memory-feedback.is-good {
+      border-color: rgba(20, 184, 166, 0.35);
+      background: rgba(20, 184, 166, 0.10);
+      color: rgba(13, 27, 42, 0.92);
+    }
+    .memory-feedback.is-bad {
+      border-color: rgba(14, 165, 233, 0.35);
+      background: rgba(14, 165, 233, 0.10);
+      color: rgba(13, 27, 42, 0.92);
+    }
+
+    .card {
+      position: relative;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.85);
+      box-shadow: 0 12px 26px rgba(2, 10, 25, 0.10);
+      padding: 0;
+      height: 110px;
+      cursor: pointer;
+      overflow: hidden;
+      perspective: 900px;
+      transition: transform 140ms ease, box-shadow 140ms ease;
+    }
+    .card:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 16px 30px rgba(2, 10, 25, 0.13);
+    }
+    .card:focus-visible {
+      outline: 3px solid rgba(14, 165, 233, 0.35);
+      outline-offset: 2px;
+    }
+    .card[disabled] { cursor: default; opacity: 0.98; transform: none; }
+
+    .card-inner {
+      position: absolute;
+      inset: 0;
+      transform-style: preserve-3d;
+      transition: transform 260ms cubic-bezier(0.2, 0.9, 0.2, 1);
+    }
+    .card.is-flipped .card-inner { transform: rotateY(180deg); }
+
+    .card-face {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      backface-visibility: hidden;
+      -webkit-backface-visibility: hidden;
+    }
+
+    .card-front {
+      background:
+        radial-gradient(220px 90px at 30% 15%, rgba(14, 165, 233, 0.22), transparent 60%),
+        radial-gradient(220px 90px at 75% 30%, rgba(20, 184, 166, 0.18), transparent 60%),
+        linear-gradient(135deg, rgba(14, 165, 233, 0.10), rgba(20, 184, 166, 0.08));
+    }
+    .card-front-mark {
+      width: 44px;
+      height: 44px;
+      border-radius: 14px;
+      background: linear-gradient(135deg, rgba(14, 165, 233, 1), rgba(20, 184, 166, 1));
+      color: #fff;
+      display: grid;
+      place-items: center;
+      font-weight: 900;
+      box-shadow: var(--shadow);
+    }
+
+    .card-back {
+      transform: rotateY(180deg);
+      background: rgba(255, 255, 255, 0.96);
+    }
+    .card-symbol {
+      font-size: 44px;
+      font-weight: 900;
+      letter-spacing: -0.6px;
+      color: rgba(13, 27, 42, 0.92);
+      filter: drop-shadow(0 8px 10px rgba(2, 10, 25, 0.12));
+    }
+
+    .card.is-matched .card-back {
+      background: rgba(20, 184, 166, 0.08);
+    }
+    .card.is-matched .card-symbol {
+      color: rgba(20, 184, 166, 1);
+    }
+
+    .modal[hidden] { display: none; }
+    .modal { position: fixed; inset: 0; z-index: 50; }
+    .modal-backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(13, 27, 42, 0.55);
+      backdrop-filter: blur(6px);
+    }
+    .modal-card {
+      position: relative;
+      width: min(640px, calc(100% - 28px));
+      margin: 10vh auto 0;
+      border-radius: 18px;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.92);
+      box-shadow: var(--shadow);
+      padding: 16px 16px;
+      animation: pop 160ms ease-out;
+    }
+    @keyframes pop {
+      from { transform: translateY(6px); opacity: 0.7; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+    .modal-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      letter-spacing: 0.7px;
+      text-transform: uppercase;
+      font-weight: 800;
+      color: rgba(14, 165, 233, 1);
+      background: rgba(14, 165, 233, 0.10);
+      border: 1px solid rgba(14, 165, 233, 0.22);
+      padding: 6px 10px;
+      border-radius: 999px;
+    }
+    .modal-title { margin: 10px 0 4px; letter-spacing: -0.3px; }
+    .modal-subtitle { margin: 0 0 12px; color: var(--muted); }
+    .modal-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+    @media (max-width: 560px) {
+      .modal-grid { grid-template-columns: 1fr; }
+    }
+    .modal-item {
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background: rgba(14, 165, 233, 0.06);
+      padding: 12px 12px;
+    }
+    .modal-label { color: var(--muted); font-weight: 750; font-size: 13px; }
+    .modal-value { font-weight: 950; font-size: 20px; margin-top: 4px; }
+    .modal-actions { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 10px; }
+  </style>
+
+  <script>
+    (function () {
+      const board = document.getElementById("board");
+      const movesEl = document.getElementById("moves");
+      const matchesEl = document.getElementById("matches");
+      const restartBtn = document.getElementById("restart");
+      const wrongEl = document.getElementById("wrong");
+      const accuracyEl = document.getElementById("accuracy");
+      const timeEl = document.getElementById("time");
+      const scoreEl = document.getElementById("score");
+      const pairsTotalEl = document.getElementById("pairsTotal");
+      const difficultyEl = document.getElementById("difficulty");
+      const saveBtn = document.getElementById("saveBtn");
+      const saveForm = document.getElementById("saveForm");
+      const saveSessionIdEl = document.getElementById("saveSessionId");
+      const saveDifficultyEl = document.getElementById("saveDifficulty");
+      const saveCardsEl = document.getElementById("saveCards");
+      const savePairsEl = document.getElementById("savePairs");
+      const saveCompletionTimeEl = document.getElementById("saveCompletionTime");
+      const saveTotalMovesEl = document.getElementById("saveTotalMoves");
+      const saveSuccessfulMatchesEl = document.getElementById("saveSuccessfulMatches");
+      const saveTotalPairsEl = document.getElementById("saveTotalPairs");
+      const saveScoreEl = document.getElementById("saveScore");
+      const saveAccuracyEl = document.getElementById("saveAccuracy");
+      const saveMoveEfficiencyEl = document.getElementById("saveMoveEfficiency");
+      const saveTimeEfficiencyEl = document.getElementById("saveTimeEfficiency");
+      const saveTimePerPairEl = document.getElementById("saveTimePerPair");
+      const saveTimeEl = document.getElementById("saveTime");
+      const saveMovesEl = document.getElementById("saveMoves");
+      const saveCorrectEl = document.getElementById("saveCorrect");
+      const saveWrongEl = document.getElementById("saveWrong");
+
+      const modal = document.getElementById("modal");
+      const finalScoreEl = document.getElementById("finalScore");
+      const finalAccuracyEl = document.getElementById("finalAccuracy");
+      const finalTimeEl = document.getElementById("finalTime");
+      const finalBaselineEl = document.getElementById("finalBaseline");
+      const finalTrendEl = document.getElementById("finalTrend");
+      const modalRestart = document.getElementById("modalRestart");
+      const modalSave = document.getElementById("modalSave");
+      const modalBackdrop = modal.querySelector(".modal-backdrop");
+      const feedbackEl = document.getElementById("feedback");
+      const BASELINES = {{ baselines|tojson }};
+
+      const SYMBOL_SETS = {
+        // Clear, obvious emojis suitable for memory training
+        8: ["🍎", "🍌", "🍇", "🍒"],
+        12: ["🍎", "🍌", "🍇", "🍒", "🧠", "❤️"],
+        16: ["🍎", "🍌", "🍇", "🍒", "🧠", "❤️", "⭐", "🌈"],
+      };
+
+      let first = null;
+      let second = null;
+      let lock = false;
+      let moves = 0; // pair attempts
+      let matches = 0;
+      let wrong = 0;
+      let score = 0;
+      let pairsTotal = 6;
+
+      let startedAtMs = 0;
+      let elapsedSeconds = 0;
+      let timerId = null;
+      let completed = false;
+      let sessionId = "";
+
+      function shuffle(arr) {
+        for (let i = arr.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [arr[i], arr[j]] = [arr[j], arr[i]];
+        }
+        return arr;
+      }
+
+      function pad2(n) {
+        return String(n).padStart(2, "0");
+      }
+
+      function formatTime(totalSeconds) {
+        const m = Math.floor(totalSeconds / 60);
+        const s = totalSeconds % 60;
+        return pad2(m) + ":" + pad2(s);
+      }
+
+      function computeAccuracy() {
+        if (moves <= 0) return 0;
+        return Math.max(0, Math.min(100, (matches / moves) * 100));
+      }
+
+      function computeMoveEfficiency() {
+        if (moves <= 0) return 0;
+        return Math.max(0, Math.min(100, (pairsTotal / moves) * 100));
+      }
+
+      function computeTimePerPair() {
+        return pairsTotal > 0 ? elapsedSeconds / pairsTotal : 0;
+      }
+
+      function computeTimeEfficiency() {
+        // Normalize elapsed time per pair; this is project-defined and has no clinical cutoff.
+        return Math.max(0, Math.min(100, 100 / (1 + computeTimePerPair())));
+      }
+
+      function computeScore() {
+        if (moves <= 0) return 0;
+        // Project-specific composite: 50% accuracy, 30% move efficiency, 20% time efficiency.
+        const scoreValue = (0.50 * computeAccuracy()) +
+          (0.30 * computeMoveEfficiency()) + (0.20 * computeTimeEfficiency());
+        return Math.max(0, Math.min(100, scoreValue));
+      }
+
+      function setStats() {
+        movesEl.textContent = String(moves);
+        matchesEl.textContent = String(matches);
+        wrongEl.textContent = String(wrong);
+        const acc = computeAccuracy();
+        accuracyEl.textContent = String(acc) + "%";
+        timeEl.textContent = formatTime(elapsedSeconds);
+        score = computeScore();
+        scoreEl.textContent = score.toFixed(1) + "/100";
+        pairsTotalEl.textContent = String(pairsTotal);
+      }
+
+      function resetTurn() {
+        first = null;
+        second = null;
+        lock = false;
+      }
+
+      function setFeedback(kind, text) {
+        feedbackEl.classList.remove("is-good", "is-bad");
+        if (kind === "good") feedbackEl.classList.add("is-good");
+        if (kind === "bad") feedbackEl.classList.add("is-bad");
+        feedbackEl.innerHTML = text;
+      }
+
+      function startTimerIfNeeded() {
+        if (timerId) return;
+        startedAtMs = Date.now();
+        timerId = setInterval(() => {
+          elapsedSeconds = Math.floor((Date.now() - startedAtMs) / 1000);
+          setStats();
+        }, 250);
+      }
+
+      function stopTimer() {
+        if (!timerId) return;
+        clearInterval(timerId);
+        timerId = null;
+      }
+
+      function flip(cardBtn) {
+        cardBtn.classList.add("is-flipped");
+        cardBtn.setAttribute("aria-pressed", "true");
+      }
+
+      function unflip(cardBtn) {
+        cardBtn.classList.remove("is-flipped");
+        cardBtn.setAttribute("aria-pressed", "false");
+      }
+
+      function markMatched(cardBtn) {
+        cardBtn.classList.add("is-matched");
+        cardBtn.disabled = true;
+      }
+
+      function openModal() {
+        modal.hidden = false;
+        modal.setAttribute("aria-hidden", "false");
+
+        const acc = computeAccuracy();
+        finalScoreEl.textContent = score.toFixed(1) + "/100";
+        finalAccuracyEl.textContent = acc.toFixed(1) + "%";
+        finalTimeEl.textContent = formatTime(elapsedSeconds);
+        const baseline = BASELINES[String(parseInt(difficultyEl.value, 10))];
+        if (baseline === undefined || baseline <= 0) {
+          finalBaselineEl.textContent = "Baseline not established";
+          finalTrendEl.textContent = "Baseline not established";
+        } else {
+          const change = ((score - baseline) / baseline) * 100;
+          finalBaselineEl.textContent = "Baseline established";
+          if (Math.abs(change) <= 5) {
+            finalTrendEl.textContent = "Stable compared with baseline";
+          } else if (change > 0) {
+            finalTrendEl.textContent = "Improved by " + change.toFixed(1) + "%";
+          } else {
+            finalTrendEl.textContent = "Declined by " + Math.abs(change).toFixed(1) + "%";
+          }
+        }
+
+        saveBtn.disabled = false;
+      }
+
+      function closeModal() {
+        modal.hidden = true;
+        modal.setAttribute("aria-hidden", "true");
+      }
+
+      function writeSaveForm() {
+        const acc = computeAccuracy();
+        saveSessionIdEl.value = sessionId;
+        saveDifficultyEl.value = difficultyEl.value;
+        saveCardsEl.value = String(parseInt(difficultyEl.value, 10));
+        savePairsEl.value = String(pairsTotal);
+        saveCompletionTimeEl.value = String(elapsedSeconds);
+        saveTotalMovesEl.value = String(moves);
+        saveSuccessfulMatchesEl.value = String(matches);
+        saveTotalPairsEl.value = String(pairsTotal);
+        saveScoreEl.value = score.toFixed(2);
+        saveAccuracyEl.value = acc.toFixed(2);
+        saveMoveEfficiencyEl.value = computeMoveEfficiency().toFixed(2);
+        saveTimeEfficiencyEl.value = computeTimeEfficiency().toFixed(2);
+        saveTimePerPairEl.value = computeTimePerPair().toFixed(2);
+        saveTimeEl.value = String(elapsedSeconds);
+        saveMovesEl.value = String(moves);
+        saveCorrectEl.value = String(matches);
+        saveWrongEl.value = String(wrong);
+      }
+
+      function saveScoreNow() {
+        if (!completed) return;
+        writeSaveForm();
+        if (window.webcamMonitor) window.webcamMonitor.stop();
+        saveForm.submit();
+      }
+
+      function onCardClick(e) {
+        const cardBtn = e.currentTarget;
+        if (lock) return;
+        if (cardBtn.disabled) return;
+        if (first === cardBtn) return;
+        if (completed) return;
+
+        startTimerIfNeeded();
+        flip(cardBtn);
+
+        if (!first) {
+          first = cardBtn;
+          setFeedback("neutral", "Select one more card to find a matching pair.");
+          return;
+        }
+
+        second = cardBtn;
+        moves += 1;
+
+        const a = first.getAttribute("data-symbol");
+        const b = second.getAttribute("data-symbol");
+
+        if (a === b) {
+          matches += 1;
+          // immediate score reward, final score still computed in setStats()
+          markMatched(first);
+          markMatched(second);
+          resetTurn();
+          setStats();
+          setFeedback("good", "<strong>Match Found!</strong> Great! Keep going.");
+
+          if (matches === pairsTotal) {
+            completed = true;
+            stopTimer();
+            setStats();
+            setFeedback("good", "<strong>Completed!</strong> All pairs matched.");
+            openModal();
+          }
+          return;
+        }
+
+        lock = true;
+        wrong += 1;
+        setStats();
+        setFeedback("bad", "<strong>Try Again.</strong> Those cards do not match.");
+        setTimeout(() => {
+          unflip(first);
+          unflip(second);
+          resetTurn();
+        }, 1000);
+      }
+
+      function buildBoard(symbolsBase) {
+        board.innerHTML = "";
+
+        const symbols = shuffle([...symbolsBase, ...symbolsBase]);
+        symbols.forEach((sym, idx) => {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "card";
+          btn.setAttribute("data-symbol", sym);
+          btn.setAttribute("aria-pressed", "false");
+          btn.setAttribute("aria-label", "Memory card");
+          btn.id = "card-" + idx;
+
+          // Inner wrapper makes the 3D flip reliable across browsers.
+          btn.innerHTML =
+            '<span class="card-inner">' +
+              '<span class="card-face card-front" aria-hidden="true">' +
+                '<span class="card-front-mark">+</span>' +
+              "</span>" +
+              '<span class="card-face card-back">' +
+                '<span class="card-symbol" aria-label="Symbol">' + sym + "</span>" +
+              "</span>" +
+            "</span>";
+
+          btn.addEventListener("click", onCardClick);
+          board.appendChild(btn);
+        });
+      }
+
+      function restart() {
+        first = null;
+        second = null;
+        lock = false;
+        moves = 0;
+        matches = 0;
+        wrong = 0;
+        score = 0;
+        completed = false;
+        sessionId = (window.crypto && window.crypto.randomUUID) ?
+          window.crypto.randomUUID() : String(Date.now()) + "-" + String(Math.random()).slice(2);
+        elapsedSeconds = 0;
+        stopTimer();
+        closeModal();
+        saveBtn.disabled = true;
+
+        const totalCards = parseInt(difficultyEl.value, 10);
+        pairsTotal = totalCards / 2;
+        const base = SYMBOL_SETS[totalCards] || SYMBOL_SETS[12];
+
+        setStats();
+        buildBoard(base);
+        setFeedback("neutral", "Click any card to begin. The timer starts on your first flip.");
+      }
+
+      restartBtn.addEventListener("click", restart);
+      difficultyEl.addEventListener("change", restart);
+      saveBtn.addEventListener("click", saveScoreNow);
+      modalSave.addEventListener("click", saveScoreNow);
+      modalRestart.addEventListener("click", restart);
+      modalBackdrop.addEventListener("click", () => closeModal());
+      window.addEventListener("pagehide", () => {});
+      window.addEventListener("beforeunload", () => {});
+
+      restart();
+    })();
+  </script>
+
+  <script src="{{ url_for('static', filename='js/webcam-monitor.js') }}"></script>
+  <script>
+    (() => {
+      const sessionIdForWebcam = {{ (session_id or '') | tojson }};
+      const webcamPanelEl = document.getElementById('webcam-panel');
+      if (webcamPanelEl) {
+        window.webcamMonitor = new WebcamMonitor({ containerEl: webcamPanelEl, sessionId: sessionIdForWebcam, userName: {{ session.get("full_name", "User")|tojson }}, initialFlagCount: {{ ui_flag_count|default(0)|tojson }} });
+        window.webcamMonitor.start();
+        window.addEventListener('pagehide', () => window.webcamMonitor.stop());
+      }
+    })();
+  </script>
+<script src="{{ url_for('static', filename='js/cursor-monitor.js') }}"></script>
+<script>
+(() => { const sid={{ (session_id or '')|tojson }}; const root=document.querySelector('#board'); if(!root||!window.CursorMonitor)return; const cm=new CursorMonitor(root); cm.start();
+  root.addEventListener('click',(e)=>{ const target=e.target.closest('button'); if(!target)return; const before=target.classList.contains('is-matched'); setTimeout(()=>{ const correct=target.classList.contains('is-matched')&&!before; cm.recordClick(correct); },20); });
+  const observer=new MutationObserver(()=>{ root.querySelectorAll('button').forEach(btn=>{ if(!btn.dataset.cursorMarked&&!btn.disabled){btn.dataset.cursorMarked='1';cm.markTargetShown();} }); }); observer.observe(root,{childList:true,subtree:true}); setTimeout(()=>observer.takeRecords(),0); window.addEventListener('pagehide',()=>{observer.disconnect();cm.save('Memory Match Game',sid);cm.stop();}); window.cursorMonitor=cm;
+})();
+</script>
+
+{% endblock %}
+

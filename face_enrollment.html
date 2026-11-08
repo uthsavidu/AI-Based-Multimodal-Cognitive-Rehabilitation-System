@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+
+{% block title %}Face Enrollment · {{ app_name }}{% endblock %}
+
+{% block content %}
+  <section class="test">
+    <div class="test-card enrollment-card">
+      <div class="test-badge">{{ 'Step 2 of 2 · Registration' if is_registration_flow else 'Patient Profile' }}</div>
+      <h1 class="test-title">Face Enrollment</h1>
+      <p class="test-lead">
+        {% if is_registration_flow %}
+          Capture 10 clear face samples from the front, left, right, up, and down. This helps verification when your head turns during a game.
+        {% else %}
+          Capture 10 clear face samples from the front, left, right, up, and down to create your private verification profile.
+        {% endif %}
+      </p>
+
+      <div class="enrollment-preview-wrap">
+        <video id="camera-preview" autoplay muted playsinline></video>
+        <div id="camera-placeholder">Camera preview will appear here.</div>
+      </div>
+      <canvas id="capture-canvas" hidden></canvas>
+
+      <p id="enrollment-status" class="enrollment-status" role="status" aria-live="polite">
+        Select Start Camera to begin.
+      </p>
+
+      <div class="game-controls">
+        <button class="button button-primary" id="start-camera" type="button">Start Camera</button>
+        <button class="button button-primary" id="capture-face" type="button" disabled>Capture 10 Multi-Angle Samples</button>
+        <button class="button button-secondary" id="stop-camera" type="button" disabled>Stop Camera</button>
+        <a class="button button-secondary" href="{{ url_for('login') if is_registration_flow else url_for('dashboard') }}">
+          {{ 'Back to Login' if is_registration_flow else 'Back to Dashboard' }}
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <style>
+    .enrollment-card { max-width: 720px; margin: 0 auto; }
+    .enrollment-preview-wrap {
+      position: relative;
+      min-height: 320px;
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+      border: 2px solid var(--border);
+      border-radius: 14px;
+      background: #102a43;
+    }
+    #camera-preview { display: block; width: 100%; max-height: 440px; object-fit: cover; transform: scaleX(-1); }
+    #camera-placeholder { position: absolute; color: #fff; text-align: center; padding: 1rem; }
+    .enrollment-status { min-height: 1.5rem; margin: 1rem 0 0; text-align: center; font-weight: 650; }
+    .enrollment-status.success { color: #065f46; }
+    .enrollment-status.error { color: #991b1b; }
+  </style>
+
+  <script>
+    (() => {
+      const video = document.getElementById('camera-preview');
+      const canvas = document.getElementById('capture-canvas');
+      const placeholder = document.getElementById('camera-placeholder');
+      const status = document.getElementById('enrollment-status');
+      const startButton = document.getElementById('start-camera');
+      const captureButton = document.getElementById('capture-face');
+      const stopButton = document.getElementById('stop-camera');
+      let stream = null;
+      let capturing = false;
+      const TOTAL = 10;
+      const POSES = [
+        {name:'Look straight at the camera', first:1},
+        {name:'Turn your face slightly LEFT', first:3},
+        {name:'Turn your face slightly RIGHT', first:5},
+        {name:'Tilt your chin slightly UP', first:7},
+        {name:'Tilt your chin slightly DOWN', first:9}
+      ];
+      function poseFor(index) { return POSES.find((pose, i) => index >= pose.first && index < (POSES[i+1]?.first || TOTAL+1)) || POSES[0]; }
+
+      function setStatus(message, type = '') {
+        status.textContent = message;
+        status.className = `enrollment-status ${type}`;
+      }
+      function stopCamera() {
+        if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+        video.srcObject = null; placeholder.hidden = false;
+        captureButton.disabled = true; stopButton.disabled = true;
+      }
+      async function startCamera() {
+        stopCamera();
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({video:true,audio:false});
+          video.srcObject = stream; placeholder.hidden = true;
+          captureButton.disabled = false; stopButton.disabled = false;
+          setStatus('We will capture 10 samples: front, left, right, up, and down. Follow each pose instruction.');
+        } catch (_e) { setStatus('Camera access was denied or unavailable.', 'error'); }
+      }
+      function wait(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+      async function captureFrame() {
+        canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+        canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+        return new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.92));
+      }
+      async function captureFace() {
+        if (!stream || !video.videoWidth || capturing) {
+          setStatus('Start the camera before capturing.', 'error'); return;
+        }
+        capturing = true; captureButton.disabled = true;
+        try {
+          for (let i = 1; i <= TOTAL; i++) {
+            const pose = poseFor(i);
+            setStatus(`Sample ${i} of ${TOTAL}: ${pose.name}. Hold still for a moment...`);
+            await wait(1400);
+            const blob = await captureFrame();
+            if (!blob) throw new Error('Could not capture the camera frame.');
+            const form = new FormData();
+            form.append('image', blob, `face-enrollment-${i}.jpg`);
+            form.append('sample_index', String(i));
+            const response = await fetch('{{ url_for("capture_face_enrollment") }}', {method:'POST',body:form});
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.message || `Sample ${i} failed.`);
+            setStatus(`Sample ${i} of ${TOTAL} accepted. ${i < TOTAL ? `Next: ${poseFor(i + 1).name}.` : ""}`);
+          }
+          setStatus('Face enrollment completed successfully.', 'success');
+          stopCamera();
+          const final = await fetch('{{ url_for("face_enrollment") }}', {method:'GET',redirect:'manual'});
+          void final;
+          {% if is_registration_flow %}
+          setTimeout(() => { window.location.href = '{{ url_for("login") }}'; }, 900);
+          {% endif %}
+        } catch (error) {
+          setStatus(error.message || 'Face enrollment failed.', 'error');
+          captureButton.disabled = false;
+        } finally { capturing = false; }
+      }
+      startButton.addEventListener('click', startCamera);
+      captureButton.addEventListener('click', captureFace);
+      stopButton.addEventListener('click', () => { stopCamera(); setStatus('Camera stopped.'); });
+      window.addEventListener('pagehide', stopCamera);
+    })();
+  </script>
+{% endblock %}

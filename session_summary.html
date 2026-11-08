@@ -1,0 +1,222 @@
+{% extends "base.html" %}
+{% block title %}Assessment Report · {{ app_name }}{% endblock %}
+{% block content %}
+<section class="test">
+<div class="test-card clean-report">
+  <div class="session-badge">Assessment Complete</div>
+  <h1 class="test-title">Cognitive Performance Report</h1>
+  <p class="test-lead">
+    Started: {{ session_row.start_time }} ·
+    Completed: {{ session_row.end_time or '—' }} ·
+    Duration: {{ session_row.duration if session_row.duration is not none else 0 }} seconds
+  </p>
+
+  <div class="report-hero-grid">
+    <div class="report-score-hero">
+      <span>OVERALL PERFORMANCE</span>
+      <strong>{{ analysis.overall_score if analysis.overall_score is not none else '—' }}</strong>
+      <small>/100 project-defined index</small>
+    </div>
+    <div class="report-focus-hero">
+      <span>AREA TO FOCUS ON</span>
+      <strong>{{ analysis.weakest_area or '—' }}</strong>
+      <p>{{ analysis.recommendation }}</p>
+    </div>
+  </div>
+
+  <h2 class="report-section-title">Overall Performance Visualization</h2>
+  <div class="report-visual-card">
+    {% for domain in domains %}
+      {% set value=analysis.domain_scores.get(domain) %}
+      <div class="report-bar-row">
+        <div class="report-bar-label"><span>{{ domain }}</span><strong>{{ value|round(1) if value is not none else '—' }}</strong></div>
+        <div class="report-bar-track"><div class="report-bar-fill" style="width: {{ value if value is not none else 0 }}%;"></div></div>
+      </div>
+    {% endfor %}
+  </div>
+
+  <h2 class="report-section-title">Performance Analysis</h2>
+  <div class="domain-grid">
+    {% for domain in domains %}
+      {% set value=analysis.domain_scores.get(domain) %}
+      <div class="domain-tile {{ 'domain-tile-empty' if value is none }}">
+        <div class="domain-tile-label">{{ domain }}</div>
+        <div class="domain-tile-value">{{ value|round(1) if value is not none else '—' }}</div>
+        <div class="report-domain-status">{{ 'Measured' if value is not none else 'Not attempted' }}</div>
+      </div>
+    {% endfor %}
+  </div>
+
+  {% if analysis.strongest_area %}
+  <div class="strong-weak-row">
+    <span class="strong-weak-pill strongest">Strongest: {{ analysis.strongest_area }}</span>
+    <span class="strong-weak-pill weakest">Needs improvement: {{ analysis.weakest_area }}</span>
+  </div>
+  {% endif %}
+
+  <div class="recommendation-card">
+    <strong>Focus recommendation</strong>
+    <p>{{ analysis.recommendation }}</p>
+  </div>
+
+  <h2 class="report-section-title">Game Results & Timestamps</h2>
+  <div class="report-table-wrap">
+    <table class="report-table">
+      <thead><tr><th>Game</th><th>Score</th><th>Accuracy</th><th>Time</th><th>Recorded at</th></tr></thead>
+      <tbody>
+      {% for g in game_rows %}
+        <tr>
+          <td>{{ g.game_name }}</td>
+          <td>{{ g.score|round(1) if g.score is not none else '—' }}</td>
+          <td>{{ g.accuracy|round(1) if g.accuracy is not none else '—' }}%</td>
+          <td>{{ g.time_taken_seconds if g.time_taken_seconds is not none else '—' }} sec</td>
+          <td>{{ g.created_at }}</td>
+        </tr>
+      {% endfor %}
+      {% if not game_rows %}<tr><td colspan="5">No game results were recorded.</td></tr>{% endif %}
+      </tbody>
+    </table>
+  </div>
+
+  <h2 class="report-section-title">Webcam — Visual / Cognitive Signals</h2>
+  <p class="session-report-cursor-note">
+    Signals are measured continuously. Flags are intentionally limited to
+    <strong>multiple faces</strong>, a <strong>sustained head turn</strong>,
+    or an <strong>unknown/unverified face</strong>. Blinks, gaze, eye state,
+    expressions, yawns and attention are measurements, not automatic flags.
+  </p>
+  <div class="session-report-stats">
+    <div><span>Face detections/checks</span><strong>{{ monitoring.face_check_attempts if monitoring else 0 }}</strong></div>
+    <div><span>Verified face checks</span><strong>{{ monitoring.face_verified_checks if monitoring else 0 }}</strong></div>
+    <div><span>Unknown/unverified face events</span><strong>{{ monitoring.face_mismatch_events if monitoring else 0 }}</strong></div>
+    <div><span>Multiple-face flags</span><strong>{{ monitoring.multiple_face_events if monitoring else 0 }}</strong></div>
+    <div><span>Head-left flags</span><strong>{{ monitoring.head_turned_left_events if monitoring else 0 }}</strong></div>
+    <div><span>Head-right flags</span><strong>{{ monitoring.head_turned_right_events if monitoring else 0 }}</strong></div>
+    <div><span>Blink count</span><strong>{{ monitoring.blink_count if monitoring else 0 }}</strong></div>
+    <div><span>Eyes open</span><strong>{{ ((monitoring.eyes_open_ms or 0)/1000)|round(1) if monitoring else 0 }} sec</strong></div>
+    <div><span>Eyes closed</span><strong>{{ ((monitoring.eyes_closed_ms or 0)/1000)|round(1) if monitoring else 0 }} sec</strong></div>
+    <div><span>Gaze center / left / right / away</span><strong>{{ monitoring.gaze_center_count if monitoring else 0 }} / {{ monitoring.gaze_left_count if monitoring else 0 }} / {{ monitoring.gaze_right_count if monitoring else 0 }} / {{ monitoring.gaze_away_count if monitoring else 0 }}</strong></div>
+    <div><span>Average pitch</span><strong>{{ ((monitoring.pitch_sum or 0)/(monitoring.pose_samples or 1))|round(1) if monitoring else 0 }}°</strong></div>
+    <div><span>Average yaw</span><strong>{{ ((monitoring.yaw_sum or 0)/(monitoring.pose_samples or 1))|round(1) if monitoring else 0 }}°</strong></div>
+    <div><span>Average roll</span><strong>{{ ((monitoring.roll_sum or 0)/(monitoring.pose_samples or 1))|round(1) if monitoring else 0 }}°</strong></div>
+    <div><span>Yawn events</span><strong>{{ monitoring.yawn_events if monitoring else 0 }}</strong></div>
+    <div><span>Distraction events</span><strong>{{ monitoring.distraction_events if monitoring else 0 }}</strong></div>
+    <div><span>Attention events</span><strong>{{ monitoring.attention_events if monitoring else 0 }}</strong></div>
+    <div><span>Monitoring duration</span><strong>{{ monitoring.monitoring_seconds if monitoring else 0 }} sec</strong></div>
+    <div><span>Total flags</span><strong>{{ monitoring.total_flags if monitoring else 0 }}</strong></div>
+  </div>
+
+  <h3 class="report-subsection-title">Facial Expressions</h3>
+  <div class="session-report-stats">
+    <div><span>Neutral</span><strong>{{ monitoring.expression_neutral if monitoring else 0 }}</strong></div>
+    <div><span>Happy</span><strong>{{ monitoring.expression_happy if monitoring else 0 }}</strong></div>
+    <div><span>Sad</span><strong>{{ monitoring.expression_sad if monitoring else 0 }}</strong></div>
+    <div><span>Angry</span><strong>{{ monitoring.expression_angry if monitoring else 0 }}</strong></div>
+    <div><span>Surprised</span><strong>{{ monitoring.expression_surprised if monitoring else 0 }}</strong></div>
+    <div><span>Fearful</span><strong>{{ monitoring.expression_fearful if monitoring else 0 }}</strong></div>
+    <div><span>Disgusted</span><strong>{{ monitoring.expression_disgusted if monitoring else 0 }}</strong></div>
+  </div>
+
+  <h2 class="report-section-title">Voice — Speech / Audio Signals</h2>
+  {% if voice_rows %}
+  <div class="report-table-wrap">
+    <table class="report-table">
+      <thead><tr><th>Level</th><th>Task</th><th>Result</th><th>Response</th><th>Speech duration</th><th>Speech rate</th><th>Pauses</th><th>Filler words</th><th>Recorded at</th></tr></thead>
+      <tbody>
+      {% for v in voice_rows %}
+        <tr>
+          <td>{{ v.level }}</td>
+          <td>{{ v.task_type }}</td>
+          <td>
+            {% if v.level==1 %}{{ 'Correct' if v.correct else 'Incorrect' }} ({{ v.recall_accuracy or 0 }}%)
+            {% elif v.level==2 %}Recall {{ v.recall_accuracy or 0 }}%
+            {% else %}{{ v.unique_words or 0 }} unique / {{ v.valid_word_count or 0 }} valid{% endif %}
+          </td>
+          <td>{{ v.response_time_ms or 0 }} ms</td>
+          <td>{{ v.speech_duration_ms or 0 }} ms</td>
+          <td>{{ v.speech_rate or 0 }} wpm</td>
+          <td>{{ v.pause_count or 0 }} / {{ v.pause_duration_ms or 0 }} ms</td>
+          <td>{{ v.filler_count or 0 }}</td>
+          <td>{{ v.created_at }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+    <p>No voice results were recorded.</p>
+  {% endif %}
+
+  <p class="session-report-cursor-note">
+    Voice timing is intentionally short: <strong>5 seconds for single-word recall</strong>,
+    <strong>8 seconds for sentence recall</strong>, and <strong>15 seconds per category round</strong>.
+    Filler words such as “um”, “uh” and “ah” are measured rather than treated as session flags.
+  </p>
+
+  <h2 class="report-section-title">Cursor / Mouse — Interaction Signals</h2>
+  {% if cursor_rows %}
+  <div class="report-table-wrap">
+    <table class="report-table">
+      <thead><tr><th>Game</th><th>Reaction</th><th>Click accuracy</th><th>Click errors</th><th>Target accuracy</th><th>Hesitation</th><th>Missed clicks</th><th>Double-click errors</th><th>Cursor movement</th><th>Speed</th><th>Recorded at</th></tr></thead>
+      <tbody>
+      {% for c in cursor_rows %}
+        <tr>
+          <td>{{ c.game_name }}</td>
+          <td>{{ '%.0f ms'|format(c.reaction_time) if c.reaction_time is not none else '—' }}</td>
+          <td>{{ '%.1f%%'|format(c.click_accuracy) if c.click_accuracy is not none else '—' }}</td>
+          <td>{{ c.incorrect_clicks or 0 }}</td>
+          <td>{{ '%.1f%%'|format(c.target_selection_accuracy) if c.target_selection_accuracy is not none else '—' }}</td>
+          <td>{{ '%.0f ms'|format(c.hesitation_time) if c.hesitation_time is not none else '—' }}</td>
+          <td>{{ c.missed_clicks or 0 }}</td>
+          <td>{{ c.double_click_errors or 0 }}</td>
+          <td>{{ (c.cursor_distance or 0)|round(0) }} px</td>
+          <td>{{ '%.1f px/s'|format(c.cursor_speed) if c.cursor_speed is not none else '—' }}</td>
+          <td>{{ c.created_at }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+    <p>No cursor interaction measurements were recorded.</p>
+  {% endif %}
+
+  <h2 class="report-section-title">Flag Events</h2>
+  {% if events %}
+  <div class="report-table-wrap">
+    <table class="report-table">
+      <thead><tr><th>Timestamp</th><th>Flag condition</th><th>Severity</th><th>Flag #</th></tr></thead>
+      <tbody>
+      {% for e in events %}
+        <tr><td>{{ e.created_at }}</td><td>{{ e.event_type }}</td><td>{{ e.severity or '—' }}</td><td>{{ e.flag_number or '—' }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+    <p>No flags were recorded.</p>
+  {% endif %}
+
+  <h2 class="report-section-title">Assessment Timeline</h2>
+  <div class="report-table-wrap">
+    <table class="report-table">
+      <thead><tr><th>Activity</th><th>Start</th><th>End</th><th>Duration</th><th>Status</th></tr></thead>
+      <tbody>
+      {% for a in activities %}
+        <tr><td>{{ a.activity_key.replace('_',' ')|title }}</td><td>{{ a.started_at }}</td><td>{{ a.ended_at or '—' }}</td><td>{{ a.duration_seconds if a.duration_seconds is not none else '—' }} sec</td><td>{{ a.status|capitalize }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="report-actions">
+    <a class="button button-primary button-lg" href="{{ url_for('session_report_pdf', session_id=session_id) }}">Download Full PDF Report</a>
+    <a class="button button-secondary" href="{{ url_for('dashboard') }}">Back to Dashboard</a>
+  </div>
+
+  <p class="test-lead report-disclaimer">
+    These scores are project-defined performance indices for progress tracking and are not clinical or diagnostic measures.
+  </p>
+</div>
+</section>
+{% endblock %}

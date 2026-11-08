@@ -1,0 +1,849 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard · {{ app_name }}{% endblock %}
+
+{% block content %}
+  <section class="dash-hero">
+    <div class="dash-hero-card">
+      <div class="dash-hero-top">
+        <div>
+          <div class="dash-kicker">Your Dashboard</div>
+          <h1 class="dash-title">Welcome, {{ username }}</h1>
+          <p class="dash-lead">Choose a test to begin. Your latest results will appear below.</p>
+        </div>
+        <div class="dash-stats">
+          <div class="stat">
+            <div class="stat-label">Completed tests</div>
+            <div class="stat-value">{{ completed_count }}</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Best score</div>
+            <div class="stat-value">{{ best_score }}</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="dash-actions">
+        <form method="post" action="{{ url_for('session_start') }}" style="display:inline;">
+          <button class="button button-primary button-lg" type="submit">Start 4-Game Cognitive Assessment</button>
+        </form>
+        <a class="button button-secondary button-lg" href="{{ url_for('memory_test') }}">Memory Test</a>
+        <a class="button button-secondary button-lg" href="{{ url_for('reaction_test') }}">Reaction Test</a>
+        <a class="button button-secondary button-lg" href="{{ url_for('memory_game') }}">Play Memory Game</a>
+        <a class="button button-secondary button-lg" href="{{ url_for('voice_game') }}">Voice Cognitive Game</a>
+        <a class="button button-secondary button-lg" href="{{ url_for('face_enrollment') }}">
+          {{ 'Re-enroll Face' if has_face_profile else 'Face Enrollment (required for login)' }}
+        </a>
+      </div>
+    </div>
+  </section>
+<section class="therapy-dashboard-section">
+    <div class="therapy-dashboard-card signal-analysis-card">
+      <div class="therapy-dashboard-main">
+        <div class="dash-kicker">HOW TO IMPROVE</div>
+        <h2>{{ therapy_plan.weakest_area }} training guidance</h2>
+        <p><strong>Current focus:</strong> {{ therapy_plan.focus }}.</p>
+        <div class="therapy-mini-steps">
+          {% for step in therapy_plan.steps %}<div><span>{{ loop.index }}</span>{{ step }}</div>{% endfor %}
+        </div>
+        {% if therapy_plan.weakest_area == 'Voice' %}
+          <p class="therapy-note"><strong>Voice coaching:</strong> speak clearly, pause briefly between ideas, avoid filler words such as “um” and “uh”, repeat sentences in the same word order, and build category words without repeating yourself.</p>
+        {% endif %}
+      </div>
+      <a class="button button-primary" href="{{ url_for('voice_game') if therapy_plan.activity_key == 'voice_game' else url_for(therapy_plan.activity_key) }}">Train this area</a>
+    </div>
+  </section>
+
+  <!-- Progress Tracking Stats Cards -->
+  <section class="progress-section">
+    <div class="stats-grid">
+      <div class="stat-box">
+        <div class="stat-box-icon">🏆</div>
+        <div class="stat-box-content">
+          <div class="stat-box-label">HIGHEST SCORE</div>
+          <div class="stat-box-value">{{ best_score }}</div>
+        </div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-box-icon">📊</div>
+        <div class="stat-box-content">
+          <div class="stat-box-label">AVERAGE SCORE</div>
+          <div class="stat-box-value">{{ avg_score }}</div>
+        </div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-box-icon">📈</div>
+        <div class="stat-box-content">
+          <div class="stat-box-label">TESTS TAKEN</div>
+          <div class="stat-box-value">{{ completed_count }}</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  {% if latest_memory_score is defined %}
+    <section class="progress-section">
+      <div class="stats-grid">
+        <div class="stat-box">
+          <div class="stat-box-icon">🧠</div>
+          <div class="stat-box-content">
+            <div class="stat-box-label">LATEST MEMORY SCORE</div>
+            <div class="stat-box-value">{{ latest_memory_score }}/100</div>
+          </div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-box-icon">📏</div>
+          <div class="stat-box-content">
+            <div class="stat-box-label">MAX SEQUENCE LENGTH</div>
+            <div class="stat-box-value">{{ latest_max_sequence_length }}</div>
+          </div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-box-icon">✅</div>
+          <div class="stat-box-content">
+            <div class="stat-box-label">ACCURACY</div>
+            <div class="stat-box-value">{{ latest_accuracy }}%</div>
+          </div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-box-icon">📝</div>
+          <div class="stat-box-content">
+            <div class="stat-box-label">CORRECT / WRONG</div>
+            <div class="stat-box-value">{{ latest_correct_responses }} / {{ latest_wrong_responses }}</div>
+          </div>
+        </div>
+      </div>
+    </section>
+  {% endif %}
+
+  <!-- Memory Performance Graph -->
+  {% if scores_json %}
+    <section class="graph-container-section">
+      <div class="graph-card">
+        <div class="graph-top">
+          <div class="graph-title-group">
+            <h2 class="graph-title">Memory Performance Trend</h2>
+            <p class="graph-subtitle">Track your memory test scores over time</p>
+          </div>
+          <span class="trend-badge">{{ trend }}</span>
+        </div>
+        <div class="chart-wrapper">
+          <canvas id="memoryChart"></canvas>
+        </div>
+      </div>
+    </section>
+  {% endif %}
+
+  <!-- Overall Cognitive Score -->
+  {% if overall_score %}
+    <section class="overall-score-container">
+      <div class="overall-card">
+        <div class="overall-left">
+          <div class="large-score-box">
+            <div class="large-score-number">{{ overall_score }}%</div>
+            <div class="large-score-label">OVERALL SCORE</div>
+            <div class="performance-text">{{ performance_label }}</div>
+          </div>
+        </div>
+        <div class="overall-right">
+          <div class="progress-bars-group">
+            <div class="progress-item">
+              <label class="progress-label">Memory Test</label>
+              <div class="progress-bar-bg">
+                <div class="progress-bar-fill memory-gradient" style="width: {{ memory_percent }}%">
+                  <span class="progress-text">{{ memory_percent }}%</span>
+                </div>
+              </div>
+            </div>
+            <div class="progress-item">
+              <label class="progress-label">Reaction Test</label>
+              <div class="progress-bar-bg">
+                <div class="progress-bar-fill reaction-gradient" style="width: {{ reaction_percent }}%">
+                  <span class="progress-text">{{ reaction_percent }}%</span>
+                </div>
+              </div>
+            </div>
+            <div class="progress-item">
+              <label class="progress-label">Memory Game</label>
+              <div class="progress-bar-bg">
+                <div class="progress-bar-fill game-gradient" style="width: {{ game_percent }}%">
+                  <span class="progress-text">{{ game_percent }}%</span>
+                </div>
+              </div>
+            </div>
+            <div class="progress-item">
+              <label class="progress-label">Voice Cognitive Game</label>
+              <div class="progress-bar-bg">
+                <div class="progress-bar-fill game-gradient" style="width: {{ voice_percent }}%">
+                  <span class="progress-text">{{ voice_percent }}%</span>
+                </div>
+              </div>
+            </div>
+            <div class="progress-item"><label class="progress-label">Cursor / Target Selection</label><div class="progress-bar-bg"><div class="progress-bar-fill game-gradient" style="width: {{ cursor_percent }}%"><span class="progress-text">{{ cursor_percent }}%</span></div></div></div>
+            <div class="progress-item"><label class="progress-label">Attention</label><div class="progress-bar-bg"><div class="progress-bar-fill game-gradient" style="width: {{ attention_percent }}%"><span class="progress-text">{{ attention_percent }}%</span></div></div></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  {% endif %}
+
+  <!-- Test History Expandable Sections -->
+  {% if test_breakdown %}
+    <section class="test-history-section">
+      {% for test_name, data in test_breakdown.items() %}
+        <div class="expandable-test-card">
+          <div class="expandable-header" onclick="toggleExpand(this)">
+            <div class="header-left">
+              <span class="expand-icon">▼</span>
+              <span class="test-type-icon">{{ data.icon }}</span>
+              <div class="test-meta">
+                <div class="test-type-name">{{ test_name }}</div>
+                <div class="test-results-count">{{ data.count }} result{{ 's' if data.count != 1 else '' }}</div>
+              </div>
+            </div>
+            <div class="header-right">
+              <div class="score-box">
+                <span class="score-box-label">BEST</span>
+                <span class="score-box-value">{{ data.best }}</span>
+              </div>
+              <div class="score-box">
+                <span class="score-box-label">AVG</span>
+                <span class="score-box-value">{{ data.avg }}</span>
+              </div>
+            </div>
+          </div>
+          <div class="expandable-content" style="display: none;">
+            {% if test_name == 'Voice Cognitive Game' %}
+              <div class="result-items-list">
+                {% for vr in voice_history %}
+                <div class="result-item-card">
+                  <div class="result-date-time"><span class="result-date">{{ vr.created_at[:10] }}</span><span class="result-time">{{ vr.created_at[11:16] }}</span></div>
+                  <div class="result-score-box"><span class="result-score-label">LEVEL</span><span class="result-score-number">{{ vr.level }}</span></div>
+                  <div class="result-details">
+                    {% if vr.level == 1 %}<span class="result-detail">Word recall: {{ vr.recall_accuracy or 0 }}%</span>{% elif vr.level == 2 %}<span class="result-detail">Sentence recall: {{ vr.recall_accuracy or 0 }}%</span>{% else %}<span class="result-detail">Valid: {{ vr.valid_word_count or 0 }} · Unique: {{ vr.unique_words or 0 }}</span>{% endif %}
+                    {% if vr.category %}<span class="result-detail">Category: {{ vr.category }}</span>{% endif %}
+                  </div>
+                  <div class="result-badge">{{ vr.task_type }}</div>
+                </div>
+                {% endfor %}
+              </div>
+            {% else %}
+              <div class="result-items-list"><div class="result-item-card"><div class="result-details"><span class="result-detail">Detailed result data is available for the activity.</span></div></div></div>
+            {% endif %}
+          </div>
+        </div>
+      {% endfor %}
+    </section>
+  {% endif %}
+
+  {% if voice_result_count %}
+    <section class="progress-section">
+      <div class="graph-card">
+        <div class="graph-top"><div class="graph-title-group"><h2 class="graph-title">Voice Cognitive Analysis</h2><p class="graph-subtitle">Speech, recall and word-retrieval signals recorded from the Voice Cognitive Game</p></div><span class="trend-badge">{{ voice_percent }}/100</span></div>
+        <div class="domain-grid voice-domain-grid">
+          <div class="domain-tile"><div class="domain-tile-label">Voice score</div><div class="domain-tile-value">{{ voice_percent }}</div></div>
+          <div class="domain-tile"><div class="domain-tile-label">Recorded rounds</div><div class="domain-tile-value">{{ voice_result_count }}</div></div>
+          <div class="domain-tile"><div class="domain-tile-label">Training focus</div><div class="domain-tile-value">{% if therapy_plan.weakest_area == 'Voice' %}Recommended{% else %}Available{% endif %}</div></div>
+        </div>
+        <div class="voice-coaching-list">
+          <div><strong>Improve recall:</strong> repeat the target after reading it once; aim to preserve the important words and their order.</div>
+          <div><strong>Improve retrieval:</strong> name more unique category words while reducing repetitions.</div>
+          <div><strong>Improve fluency:</strong> reduce long pauses and filler words while keeping speech clear.</div>
+        </div>
+      </div>
+    </section>
+  {% endif %}
+
+  <!-- Guided-session domain scores, weak/strong areas, recommendation, history -->
+  {% if latest_session %}
+    <section class="progress-section">
+      <div class="graph-card">
+        <div class="graph-top">
+          <div class="graph-title-group">
+            <h2 class="graph-title">Latest Assessment Performance</h2>
+            <p class="graph-subtitle">
+              {{ latest_session.start_time }} ·
+              Overall: {{ latest_session.overall_score if latest_session.overall_score is not none else '—' }}/100
+            </p>
+          </div>
+        </div>
+
+        <div class="domain-grid">
+          {% for domain in ['Memory','Reaction','Voice','Cursor','Attention'] %}
+            {% set value = latest_session.domain_scores.get(domain) %}
+            <div class="domain-tile {{ 'domain-tile-empty' if value is none }}">
+              <div class="domain-tile-label">{{ domain }}</div>
+              <div class="domain-tile-value">{{ (value | round(1)) if value is not none else 'Not attempted' }}</div>
+            </div>
+          {% endfor %}
+        </div>
+
+        {% if latest_session.strongest_area %}
+          <div class="strong-weak-row">
+            <span class="strong-weak-pill strongest">Strongest: {{ latest_session.strongest_area }}</span>
+            <span class="strong-weak-pill weakest">Needs improvement: {{ latest_session.weakest_area }}</span>
+          </div>
+        {% endif %}
+
+        <div class="recommendation-card">
+          <strong>Recommendation:</strong> {{ latest_session.recommendation }}
+        </div>
+        <div class="session-meta-grid">
+          <div><strong>Assessment duration</strong><br>{{ latest_session.duration if latest_session.duration is not none else '—' }} seconds</div>
+          <div><strong>Assessment status</strong><br>{{ latest_session.status|capitalize }}</div>
+        </div>
+        <div class="game-controls">
+          <a class="button button-primary" href="{{ url_for('session_report_pdf', session_id=latest_session.session_id) }}">Download Assessment Report</a>
+        </div>
+      </div>
+    </section>
+  {% endif %}
+
+  {% if session_history %}
+    <section class="graph-container-section">
+      <div class="graph-card">
+        <div class="graph-top">
+          <div class="graph-title-group">
+            <h2 class="graph-title">Assessment Progress</h2>
+            <p class="graph-subtitle">Overall performance index across your completed assessments</p>
+          </div>
+        </div>
+        <div class="chart-wrapper">
+          <canvas id="sessionChart"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <section class="progress-section">
+      <div class="graph-card">
+        <div class="graph-top">
+          <div class="graph-title-group">
+            <h2 class="graph-title">Session History</h2>
+          </div>
+        </div>
+        <table class="session-history-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Overall</th>
+              {% for domain in ['Memory','Reaction','Voice','Cursor','Attention'] %}
+                <th>{{ domain }}</th>
+              {% endfor %}
+              <th>Strongest</th>
+              <th>Weakest</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for s in session_history | reverse %}
+              <tr>
+                <td>{{ s.start_time }}</td>
+                <td>{{ s.overall_score if s.overall_score is not none else '—' }}</td>
+                {% for domain in ['Memory','Reaction','Voice','Cursor','Attention'] %}
+                  {% set value = s.domain_scores.get(domain) %}
+                  <td>
+                    {{ (value | round(1)) if value is not none else '—' }}
+                    <span class="trend-tag {{ s.trend_labels.get(domain, '') | replace(' ', '-') }}">{{ s.trend_labels.get(domain, '') }}</span>
+                  </td>
+                {% endfor %}
+                <td>{{ s.strongest_area or '—' }}</td>
+                <td>{{ s.weakest_area or '—' }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  {% endif %}
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script>
+    const scores = {{ scores_json|safe }};
+    const times = {{ times_json|safe }};
+    
+    if (scores && scores.length > 0) {
+      const ctx = document.getElementById('memoryChart').getContext('2d');
+      new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: times,
+          datasets: [{
+            label: 'Memory Performance',
+            data: scores,
+            borderColor: '#3b82f6',
+            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+            fill: true,
+            tension: 0.4,
+            pointRadius: 5,
+            pointBackgroundColor: '#3b82f6',
+            pointBorderColor: '#fff',
+            pointBorderWidth: 2,
+            pointHoverRadius: 7
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              max: 100,
+              ticks: {
+                callback: function(value) {
+                  return value + '/100';
+                }
+              }
+            }
+          }
+        }
+      });
+    }
+
+    function toggleExpand(element) {
+      element.classList.toggle('expanded');
+      const content = element.nextElementSibling;
+      if (content.style.display === 'none') {
+        content.style.display = 'block';
+      } else {
+        content.style.display = 'none';
+      }
+    }
+
+    // Session-to-session overall performance chart
+    const sessionChartData = {{ session_history_chart_json | safe }};
+    const sessionChartCanvas = document.getElementById('sessionChart');
+    if (sessionChartCanvas && sessionChartData.length > 0) {
+      new Chart(sessionChartCanvas.getContext('2d'), {
+        type: 'line',
+        data: {
+          labels: sessionChartData.map((s) => s.label),
+          datasets: [{
+            label: 'Overall Performance Index',
+            data: sessionChartData.map((s) => s.overall),
+            borderColor: '#14b8a6',
+            backgroundColor: 'rgba(20, 184, 166, 0.12)',
+            fill: true,
+            tension: 0.3,
+          }],
+        },
+        options: {
+          responsive: true,
+          scales: { y: { beginAtZero: true, max: 100 } },
+        },
+      });
+    }
+  </script>
+
+  <style>
+    /* Progress Section */
+    .progress-section {
+      margin: 2rem 0;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 1.5rem;
+    }
+
+    .stat-box {
+      background: white;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      padding: 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 1.5rem;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+    }
+
+    .stat-box-icon {
+      font-size: 2.5rem;
+      min-width: 50px;
+    }
+
+    .stat-box-content {
+      flex: 1;
+    }
+
+    .stat-box-label {
+      font-size: 0.7rem;
+      font-weight: 700;
+      color: #9ca3af;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 0.25rem;
+    }
+
+    .stat-box-value {
+      font-size: 2rem;
+      font-weight: 800;
+      color: #1f2937;
+    }
+
+    /* Graph Section */
+    .graph-container-section {
+      margin: 2rem 0;
+    }
+
+    .graph-card {
+      background: white;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      padding: 2rem;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+    }
+
+    .graph-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 2rem;
+    }
+
+    .graph-title-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
+    .graph-title {
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: #1f2937;
+    }
+
+    .graph-subtitle {
+      font-size: 0.85rem;
+      color: #6b7280;
+    }
+
+    .trend-badge {
+      background: #d1fae5;
+      color: #065f46;
+      padding: 0.5rem 1rem;
+      border-radius: 16px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .chart-wrapper {
+      position: relative;
+      height: 300px;
+    }
+
+    /* Overall Score Section */
+    .overall-score-container {
+      margin: 2rem 0;
+    }
+
+    .overall-card {
+      background: white;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      padding: 2rem;
+      display: grid;
+      grid-template-columns: 1fr 2fr;
+      gap: 3rem;
+      align-items: center;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+    }
+
+    .overall-left {
+      display: flex;
+      justify-content: center;
+    }
+
+    .large-score-box {
+      background: #f0f4f8;
+      border-radius: 12px;
+      padding: 2rem;
+      text-align: center;
+    }
+
+    .large-score-number {
+      font-size: 3.5rem;
+      font-weight: 800;
+      color: #3b82f6;
+      line-height: 1;
+      margin-bottom: 0.5rem;
+    }
+
+    .large-score-label {
+      font-size: 0.7rem;
+      font-weight: 700;
+      color: #9ca3af;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 0.5rem;
+    }
+
+    .performance-text {
+      font-size: 0.95rem;
+      color: #6b7280;
+      font-weight: 600;
+    }
+
+    .overall-right {
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    .progress-bars-group {
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    .progress-item {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .progress-label {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #374151;
+    }
+
+    .progress-bar-bg {
+      height: 24px;
+      background: #e5e7eb;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .progress-bar-fill {
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .memory-gradient {
+      background: linear-gradient(90deg, #3b82f6, #0ea5e9);
+    }
+
+    .reaction-gradient {
+      background: linear-gradient(90deg, #ef4444, #f87171);
+    }
+
+    .game-gradient {
+      background: linear-gradient(90deg, #22c55e, #4ade80);
+    }
+
+    .progress-text {
+      color: white;
+      font-size: 0.7rem;
+      font-weight: 700;
+    }
+
+    /* Test History Section */
+    .test-history-section {
+      margin: 2rem 0;
+    }
+
+    .expandable-test-card {
+      background: white;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      overflow: hidden;
+      margin-bottom: 1rem;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+    }
+
+    .expandable-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1.5rem;
+      cursor: pointer;
+      background: white;
+      border-bottom: 1px solid #e5e7eb;
+      user-select: none;
+      transition: background 0.2s;
+    }
+
+    .expandable-header:hover {
+      background: #f9fafb;
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .expand-icon {
+      font-size: 0.7rem;
+      color: #9ca3af;
+      transition: transform 0.3s;
+      display: inline-block;
+    }
+
+    .expandable-header.expanded .expand-icon {
+      transform: rotate(180deg);
+    }
+
+    .test-type-icon {
+      font-size: 1.5rem;
+    }
+
+    .test-meta {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
+    .test-type-name {
+      font-weight: 600;
+      color: #1f2937;
+      font-size: 0.95rem;
+    }
+
+    .test-results-count {
+      font-size: 0.75rem;
+      color: #9ca3af;
+    }
+
+    .header-right {
+      display: flex;
+      gap: 2.5rem;
+      align-items: center;
+    }
+
+    .score-box {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.2rem;
+    }
+
+    .score-box-label {
+      font-size: 0.65rem;
+      font-weight: 700;
+      color: #9ca3af;
+      text-transform: uppercase;
+    }
+
+    .score-box-value {
+      font-weight: 700;
+      color: #1f2937;
+      font-size: 0.95rem;
+    }
+
+    .expandable-content {
+      background: #faf8f3;
+      padding: 1.5rem;
+    }
+
+    .result-items-list {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .result-item-card {
+      background: #fef5ed;
+      border: 1px solid #f3e8d6;
+      border-radius: 10px;
+      padding: 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 1.5rem;
+    }
+
+    .result-date-time {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+      min-width: 70px;
+    }
+
+    .result-date {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #1f2937;
+    }
+
+    .result-time {
+      font-size: 0.75rem;
+      color: #9ca3af;
+    }
+
+    .result-score-box {
+      background: white;
+      border: 2px solid #fbbf24;
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      text-align: center;
+      min-width: 90px;
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
+    .result-score-label {
+      font-size: 0.65rem;
+      font-weight: 700;
+      color: #9ca3af;
+      text-transform: uppercase;
+    }
+
+    .result-score-number {
+      font-size: 1.5rem;
+      font-weight: 800;
+      color: #fbbf24;
+    }
+
+    .result-details {
+      flex: 1;
+      display: flex;
+      gap: 2rem;
+      font-size: 0.85rem;
+    }
+
+    .result-detail {
+      color: #6b7280;
+    }
+
+    .result-badge {
+      background: linear-gradient(135deg, #fbbf24, #f59e0b);
+      color: white;
+      padding: 0.5rem 0.75rem;
+      border-radius: 6px;
+      font-size: 0.7rem;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    @media (max-width: 768px) {
+      .overall-card {
+        grid-template-columns: 1fr;
+        gap: 1.5rem;
+      }
+
+      .stats-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .chart-wrapper {
+        height: 250px;
+      }
+
+      .header-right {
+        gap: 1rem;
+      }
+
+      .result-item-card {
+        flex-wrap: wrap;
+      }
+    }
+  </style>
+{% endblock %}

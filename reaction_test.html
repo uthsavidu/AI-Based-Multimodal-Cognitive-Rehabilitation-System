@@ -1,0 +1,646 @@
+{% extends "base.html" %}
+
+{% block title %}Reaction Test · {{ app_name }}{% endblock %}
+
+{% block content %}
+  <section class="test">
+    {% if session_id %}<div class="session-badge">Assessment</div>{% endif %}
+    {% if instruction %}<div class="activity-instruction-banner">{{ instruction }}</div>{% endif %}
+    <div class="activity-layout">
+    <div class="test-card reaction-wrap">
+      <div class="test-badge">Assessment</div>
+      <h1 class="test-title">Reaction Tap Game</h1>
+      <p class="test-lead">
+        Wait for <strong>green</strong>, then tap as fast as you can. If you tap on <strong>red</strong>, it counts as an early click.
+        This test runs for <strong>3 rounds</strong> and calculates your average reaction time.
+      </p>
+
+      <div class="reaction-toolbar" role="status" aria-live="polite">
+        <div class="reaction-stats">
+          <div class="reaction-stat"><span class="reaction-label">Round</span> <span id="round">0</span>/3</div>
+          <div class="reaction-stat"><span class="reaction-label">Successful</span> <span id="success">0</span></div>
+          <div class="reaction-stat"><span class="reaction-label">Early</span> <span id="early">0</span></div>
+          <div class="reaction-stat"><span class="reaction-label">Best</span> <span id="best">—</span></div>
+          <div class="reaction-stat"><span class="reaction-label">Average</span> <span id="avg">—</span></div>
+          <div class="reaction-stat"><span class="reaction-label">Median</span> <span id="median">—</span></div>
+          <div class="reaction-stat"><span class="reaction-label">Score</span> <span id="score">0</span></div>
+        </div>
+
+        <div class="reaction-actions">
+          <button class="button button-primary" type="button" id="start">Start Test</button>
+          <button class="button button-secondary" type="button" id="restart" disabled>Restart Test</button>
+          <button class="button button-secondary" type="button" id="save" disabled>Save Score</button>
+          <a class="button button-secondary" href="{{ url_for('dashboard') }}">Back to Dashboard</a>
+        </div>
+      </div>
+
+      <div class="reaction-feedback" id="feedback" aria-live="polite">
+        Click <strong>Start Test</strong> to begin.
+      </div>
+
+      <button class="tap-area tap-wait" id="tapArea" type="button" aria-label="Tap area">
+        <div class="tap-top" id="tapState">WAIT</div>
+        <div class="tap-main" id="tapText">Red = Wait</div>
+        <div class="tap-sub" id="tapSub">The color will change at a random time.</div>
+      </button>
+
+      <form id="saveForm" method="post" action="{{ url_for('save_reaction_test') }}" style="display:none;">
+        <input type="hidden" name="avg_reaction_ms" id="saveAvg" value="0" />
+        <input type="hidden" name="median_reaction_ms" id="saveMedian" value="0" />
+        <input type="hidden" name="best_reaction_ms" id="saveBest" value="0" />
+        <input type="hidden" name="score" id="saveScore" value="0" />
+        <input type="hidden" name="performance_level" id="saveLevel" value="" />
+        <input type="hidden" name="baseline_status" id="saveBaselineStatus" value="" />
+        <input type="hidden" name="change_from_baseline_percent" id="saveChangeFromBaseline" value="0" />
+        <input type="hidden" name="trend_status" id="saveTrendStatus" value="" />
+        <input type="hidden" name="baseline_median_reaction_ms" id="saveBaselineMedian" value="0" />
+        <input type="hidden" name="rounds" id="saveRounds" value="3" />
+        <input type="hidden" name="successful_taps" id="saveSuccessful" value="0" />
+        <input type="hidden" name="early_clicks" id="saveEarly" value="0" />
+        <input type="hidden" name="reaction_times_json" id="saveReactionTimes" value="[]" />
+        <input type="hidden" name="session_id" value="{{ session_id or '' }}" />
+      </form>
+
+      <div class="modal" id="modal" hidden aria-hidden="true">
+        <div class="modal-backdrop" data-close="true"></div>
+        <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+          <div class="modal-badge">Completed</div>
+          <h2 class="modal-title" id="modalTitle">Reaction Test Completed</h2>
+          <p class="modal-subtitle">Your results are ready.</p>
+
+              <div class="modal-grid">
+            <div class="modal-item">
+              <div class="modal-label">Average Reaction Time</div>
+              <div class="modal-value" id="finalAvg">—</div>
+            </div>
+            <div class="modal-item">
+              <div class="modal-label">Median Reaction Time</div>
+              <div class="modal-value" id="finalMedian">—</div>
+            </div>
+            <div class="modal-item">
+              <div class="modal-label">Best Time</div>
+              <div class="modal-value" id="finalBest">—</div>
+            </div>
+            <div class="modal-item">
+              <div class="modal-label">Final Score</div>
+              <div class="modal-value" id="finalScore">0</div>
+            </div>
+            <div class="modal-item">
+              <div class="modal-label">Baseline Status</div>
+              <div class="modal-value" id="finalLevel">Baseline not established</div>
+            </div>
+          </div>
+
+          <div class="modal-actions">
+            <button class="button button-primary" type="button" id="modalRestart">Restart</button>
+            <button class="button button-secondary" type="button" id="modalSave">Save Score</button>
+            <a class="button button-secondary" href="{{ url_for('dashboard') }}">Back to Dashboard</a>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="webcam-panel"></div>
+    </div>
+  </section>
+
+  <style>
+    .reaction-wrap { padding-bottom: 18px; }
+
+    .reaction-toolbar {
+      margin-top: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      padding: 12px 12px;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.75);
+    }
+    .reaction-stats { display: flex; gap: 10px; flex-wrap: wrap; }
+    .reaction-stat {
+      border: 1px solid var(--border);
+      background: rgba(14, 165, 233, 0.06);
+      border-radius: 14px;
+      padding: 8px 10px;
+      font-weight: 800;
+      letter-spacing: -0.2px;
+    }
+    .reaction-label { color: var(--muted); font-weight: 650; margin-right: 8px; }
+    .reaction-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+    .reaction-feedback {
+      margin-top: 10px;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.70);
+      border-radius: 14px;
+      padding: 10px 12px;
+      min-height: 44px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--muted);
+      font-weight: 750;
+    }
+    .reaction-feedback.is-good {
+      border-color: rgba(20, 184, 166, 0.35);
+      background: rgba(20, 184, 166, 0.10);
+      color: rgba(13, 27, 42, 0.92);
+    }
+    .reaction-feedback.is-bad {
+      border-color: rgba(239, 68, 68, 0.30);
+      background: rgba(239, 68, 68, 0.10);
+      color: rgba(13, 27, 42, 0.92);
+    }
+
+    .tap-area {
+      width: 100%;
+      margin-top: 14px;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 22px 14px;
+      cursor: pointer;
+      text-align: center;
+      box-shadow: 0 14px 30px rgba(2, 10, 25, 0.10);
+      transition: transform 140ms ease, box-shadow 140ms ease, background 140ms ease;
+      user-select: none;
+    }
+    .tap-area:hover { transform: translateY(-1px); box-shadow: 0 18px 36px rgba(2, 10, 25, 0.14); }
+    .tap-area:focus-visible { outline: 3px solid rgba(14, 165, 233, 0.35); outline-offset: 2px; }
+    .tap-area[disabled] { cursor: default; opacity: 0.95; transform: none; }
+
+    .tap-top {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-weight: 900;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      border: 1px solid rgba(255, 255, 255, 0.35);
+      background: rgba(255, 255, 255, 0.18);
+      color: rgba(255, 255, 255, 0.95);
+    }
+    .tap-main { margin-top: 12px; font-weight: 950; font-size: 26px; letter-spacing: -0.6px; color: #fff; }
+    .tap-sub { margin-top: 6px; color: rgba(255, 255, 255, 0.92); font-weight: 650; }
+
+    .tap-wait {
+      background: linear-gradient(135deg, rgba(239, 68, 68, 0.95), rgba(220, 38, 38, 0.90));
+    }
+    .tap-go {
+      background: linear-gradient(135deg, rgba(34, 197, 94, 0.95), rgba(16, 185, 129, 0.90));
+      animation: pulse 700ms ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0% { filter: brightness(1); }
+      50% { filter: brightness(1.06); }
+      100% { filter: brightness(1); }
+    }
+    .tap-idle {
+      background: radial-gradient(800px 260px at 15% 0%, rgba(14, 165, 233, 0.22), transparent 60%),
+        radial-gradient(700px 260px at 85% 10%, rgba(20, 184, 166, 0.18), transparent 60%),
+        rgba(13, 27, 42, 0.85);
+    }
+
+    /* Reuse modal styles similar to memory_game.html */
+    .modal[hidden] { display: none; }
+    .modal { position: fixed; inset: 0; z-index: 50; }
+    .modal-backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(13, 27, 42, 0.55);
+      backdrop-filter: blur(6px);
+    }
+    .modal-card {
+      position: relative;
+      width: min(640px, calc(100% - 28px));
+      margin: 10vh auto 0;
+      border-radius: 18px;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.92);
+      box-shadow: var(--shadow);
+      padding: 16px 16px;
+      animation: pop 160ms ease-out;
+    }
+    @keyframes pop {
+      from { transform: translateY(6px); opacity: 0.7; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+    .modal-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      letter-spacing: 0.7px;
+      text-transform: uppercase;
+      font-weight: 800;
+      color: rgba(14, 165, 233, 1);
+      background: rgba(14, 165, 233, 0.10);
+      border: 1px solid rgba(14, 165, 233, 0.22);
+      padding: 6px 10px;
+      border-radius: 999px;
+    }
+    .modal-title { margin: 10px 0 4px; letter-spacing: -0.3px; }
+    .modal-subtitle { margin: 0 0 12px; color: var(--muted); }
+    .modal-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+    @media (max-width: 560px) { .modal-grid { grid-template-columns: 1fr; } }
+    .modal-item {
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background: rgba(14, 165, 233, 0.06);
+      padding: 12px 12px;
+    }
+    .modal-label { color: var(--muted); font-weight: 750; font-size: 13px; }
+    .modal-value { font-weight: 950; font-size: 20px; margin-top: 4px; }
+    .modal-actions { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 10px; }
+  </style>
+
+  <script>
+    (function () {
+      const TOTAL_ROUNDS = 3;
+
+      const roundEl = document.getElementById("round");
+      const successEl = document.getElementById("success");
+      const earlyEl = document.getElementById("early");
+      const bestEl = document.getElementById("best");
+      const avgEl = document.getElementById("avg");
+      const medianEl = document.getElementById("median");
+      const scoreEl = document.getElementById("score");
+      const feedbackEl = document.getElementById("feedback");
+
+      const startBtn = document.getElementById("start");
+      const restartBtn = document.getElementById("restart");
+      const saveBtn = document.getElementById("save");
+      const tapArea = document.getElementById("tapArea");
+      const tapState = document.getElementById("tapState");
+      const tapText = document.getElementById("tapText");
+      const tapSub = document.getElementById("tapSub");
+
+      const modal = document.getElementById("modal");
+      const modalBackdrop = modal.querySelector(".modal-backdrop");
+      const modalRestart = document.getElementById("modalRestart");
+      const modalSave = document.getElementById("modalSave");
+      const finalAvg = document.getElementById("finalAvg");
+      const finalMedian = document.getElementById("finalMedian");
+      const finalBest = document.getElementById("finalBest");
+      const finalScore = document.getElementById("finalScore");
+      const finalLevel = document.getElementById("finalLevel");
+
+      const saveForm = document.getElementById("saveForm");
+      const saveAvg = document.getElementById("saveAvg");
+      const saveMedian = document.getElementById("saveMedian");
+      const saveBest = document.getElementById("saveBest");
+      const saveScore = document.getElementById("saveScore");
+      const saveLevel = document.getElementById("saveLevel");
+      const saveBaselineStatus = document.getElementById("saveBaselineStatus");
+      const saveChangeFromBaseline = document.getElementById("saveChangeFromBaseline");
+      const saveTrendStatus = document.getElementById("saveTrendStatus");
+      const saveBaselineMedian = document.getElementById("saveBaselineMedian");
+      const saveRounds = document.getElementById("saveRounds");
+      const saveSuccessful = document.getElementById("saveSuccessful");
+      const saveEarly = document.getElementById("saveEarly");
+      const saveReactionTimes = document.getElementById("saveReactionTimes");
+
+      const BASELINE_STABILITY_PERCENT = 5;
+
+      let state = "idle"; // idle | wait | go | done
+      let round = 0;
+      let successful = 0;
+      let early = 0;
+      let times = []; // raw successful reaction times in milliseconds
+      let roundResults = []; // [{ round: 1, reactionTimeMs: 280, successful: true, earlyClick: false }]
+      let goAt = 0;
+      let waitTimer = null;
+
+      function medianTime(msValues) {
+        if (!Array.isArray(msValues) || msValues.length === 0) return null;
+        const valid = msValues.filter((value) => Number.isFinite(value) && value > 0).sort((a, b) => a - b);
+        if (!valid.length) return null;
+        const middle = Math.floor(valid.length / 2);
+        if (valid.length % 2 === 0) {
+          return Math.round((valid[middle - 1] + valid[middle]) / 2);
+        }
+        return valid[middle];
+      }
+
+      function calculateBaselineStatus(currentMedianMs, baselineMedianMs) {
+        // This system does not use a universal reaction-time cutoff. It measures each user's
+        // performance and establishes an individual baseline for longitudinal comparison.
+        // The project-defined trend threshold is not a clinical cutoff.
+        if (!Number.isFinite(currentMedianMs) || currentMedianMs <= 0 || !Number.isFinite(baselineMedianMs) || baselineMedianMs <= 0) {
+          return { label: "Baseline not established", percentChange: 0 };
+        }
+
+        const percentChange = ((baselineMedianMs - currentMedianMs) / baselineMedianMs) * 100;
+        if (Math.abs(percentChange) <= BASELINE_STABILITY_PERCENT) {
+          return { label: "Stable compared with baseline", percentChange };
+        }
+        if (percentChange > 0) {
+          return { label: `Improved by ${Math.abs(percentChange).toFixed(1)}% compared with baseline`, percentChange };
+        }
+        return { label: `Declined by ${Math.abs(percentChange).toFixed(1)}% compared with baseline`, percentChange };
+      }
+
+      function computeReactionScore(medianMs, earlyClicks) {
+        // Project-specific Performance Score: this is the weighted score used for this game only.
+        // It is derived from actual session performance (median reaction speed, successful trial count,
+        // and early-click control). It is not a medical or clinical score.
+        if (!Number.isFinite(medianMs) || medianMs <= 0) {
+          return 0;
+        }
+
+        const speedComponent = Math.max(0, Math.min(100, 100 - (medianMs / 10)));
+        const successComponent = (successful / Math.max(1, TOTAL_ROUNDS)) * 20;
+        const earlyControlComponent = Math.max(0, (1 - (early / Math.max(1, TOTAL_ROUNDS))) * 20);
+        // successComponent and earlyControlComponent are already scaled to 0–20.
+        // Apply the weights once: 60 points speed, 20 successful rounds, 20 impulse control.
+        const finalScore = (speedComponent * 0.60) + successComponent + earlyControlComponent;
+
+        return Math.max(0, Math.min(100, Number(finalScore.toFixed(1))));
+      }
+
+      function setFeedback(kind, text) {
+        feedbackEl.classList.remove("is-good", "is-bad");
+        if (kind === "good") feedbackEl.classList.add("is-good");
+        if (kind === "bad") feedbackEl.classList.add("is-bad");
+        feedbackEl.innerHTML = text;
+      }
+
+      function formatMs(ms) {
+        return (ms / 1000).toFixed(2) + " s";
+      }
+
+      function bestTime() {
+        if (!times.length) return null;
+        return Math.min.apply(null, times);
+      }
+
+      function avgTime() {
+        if (!times.length) return null;
+        const sum = times.reduce((a, b) => a + b, 0);
+        return Math.round(sum / times.length);
+      }
+
+      function performanceLevel() {
+        return "Project-specific Performance Score";
+      }
+
+      function computeScore(avgMs, earlyClicks) {
+        const medianMs = medianTime(times);
+        return computeReactionScore(medianMs ?? avgMs ?? 0, earlyClicks);
+      }
+
+      function renderStats() {
+        roundEl.textContent = String(round);
+        successEl.textContent = String(successful);
+        earlyEl.textContent = String(early);
+
+        const best = bestTime();
+        const avg = avgTime();
+        const median = medianTime(times);
+        const score = computeScore(avg, early);
+
+        bestEl.textContent = best === null ? "—" : formatMs(best);
+        avgEl.textContent = avg === null ? "—" : formatMs(avg);
+        medianEl.textContent = median === null ? "—" : formatMs(median);
+        scoreEl.textContent = String(score);
+      }
+
+      function clearWaitTimer() {
+        if (waitTimer) {
+          clearTimeout(waitTimer);
+          waitTimer = null;
+        }
+      }
+
+      function setTapIdle() {
+        tapArea.classList.remove("tap-wait", "tap-go");
+        tapArea.classList.add("tap-idle");
+        tapState.textContent = "READY";
+        tapText.textContent = "Press Start";
+        tapSub.textContent = "You will tap when the color turns green.";
+      }
+
+      function setTapWait() {
+        tapArea.classList.remove("tap-idle", "tap-go");
+        tapArea.classList.add("tap-wait");
+        tapState.textContent = "WAIT";
+        tapText.textContent = "Red = Wait";
+        tapSub.textContent = "Do not tap yet.";
+      }
+
+      function setTapGo() {
+        tapArea.classList.remove("tap-idle", "tap-wait");
+        tapArea.classList.add("tap-go");
+        tapState.textContent = "TAP NOW";
+        tapText.textContent = "Green = Tap Now";
+        tapSub.textContent = "Tap as fast as possible!";
+      }
+
+      function openModal(avgMs, medianMs, bestMs, score, level) {
+        finalAvg.textContent = formatMs(avgMs);
+        finalMedian.textContent = formatMs(medianMs);
+        finalBest.textContent = formatMs(bestMs);
+        finalScore.textContent = String(score);
+        finalLevel.textContent = level;
+        modal.hidden = false;
+        modal.setAttribute("aria-hidden", "false");
+      }
+
+      function closeModal() {
+        modal.hidden = true;
+        modal.setAttribute("aria-hidden", "true");
+      }
+
+      function beginWaitForGreen() {
+        state = "wait";
+        setTapWait();
+        setFeedback("neutral", "Wait for <strong>green</strong>…");
+
+        clearWaitTimer();
+        const delay = 1500 + Math.floor(Math.random() * 2500); // 1.5s–4s
+        waitTimer = setTimeout(() => {
+          state = "go";
+          setTapGo();
+          goAt = performance.now();
+          setFeedback("good", "<strong>Tap Now!</strong>");
+        }, delay);
+      }
+
+      function startTest() {
+        closeModal();
+        clearWaitTimer();
+        times = [];
+        roundResults = [];
+        round = 1;
+        successful = 0;
+        early = 0;
+        state = "wait";
+
+        startBtn.disabled = true;
+        restartBtn.disabled = false;
+        saveBtn.disabled = true;
+
+        renderStats();
+        beginWaitForGreen();
+      }
+
+      function restartTest() {
+        startBtn.disabled = false;
+        restartBtn.disabled = true;
+        saveBtn.disabled = true;
+        clearWaitTimer();
+        state = "idle";
+        round = 0;
+        successful = 0;
+        early = 0;
+        times = [];
+        roundResults = [];
+        renderStats();
+        setFeedback("neutral", "Click <strong>Start Test</strong> to begin.");
+        setTapIdle();
+        closeModal();
+      }
+
+      async function finishTest() {
+        state = "done";
+        clearWaitTimer();
+        startBtn.disabled = false;
+        restartBtn.disabled = false;
+        saveBtn.disabled = false;
+
+        const avgMs = avgTime();
+        const medianMs = medianTime(times);
+        const bestMs = bestTime();
+        const baselineInfo = await fetch('{{ url_for("reaction_test_baseline") }}').then((response) => response.ok ? response.json() : { baselineMedianMs: null, baselineStatus: 'Baseline not established', trendStatus: 'Baseline not established' });
+        const baselineStatus = calculateBaselineStatus(medianMs ?? avgMs ?? 0, baselineInfo.baselineMedianMs ?? 0);
+        const score = computeScore(avgMs, early);
+
+        setFeedback("good", "<strong>Test Completed.</strong> Review your results and save your score.");
+        setTapIdle();
+        renderStats();
+
+        // Write save form fields
+        saveAvg.value = String(avgMs ?? 0);
+        saveMedian.value = String(medianMs ?? 0);
+        saveBest.value = String(bestMs ?? 0);
+        saveScore.value = String(score);
+        saveLevel.value = baselineStatus.label || "Baseline not established";
+        saveBaselineStatus.value = baselineStatus.label || "Baseline not established";
+        saveTrendStatus.value = baselineStatus.label || "Baseline not established";
+        saveChangeFromBaseline.value = String(Number(baselineStatus.percentChange || 0).toFixed(2));
+        saveBaselineMedian.value = String(baselineInfo.baselineMedianMs ?? 0);
+        saveRounds.value = String(TOTAL_ROUNDS);
+        saveSuccessful.value = String(successful);
+        saveEarly.value = String(early);
+        saveReactionTimes.value = JSON.stringify(roundResults);
+
+        const finalBaselineStatus = baselineInfo.baselineMedianMs ? baselineStatus.label : "Baseline not established";
+        openModal(avgMs ?? 0, medianMs ?? 0, bestMs ?? 0, score, finalBaselineStatus);
+      }
+
+      function onTap() {
+        if (state === "idle") {
+          setFeedback("neutral", "Click <strong>Start Test</strong> first.");
+          return;
+        }
+
+        if (state === "wait") {
+          early += 1;
+          roundResults.push({
+            round: round,
+            reactionTimeMs: null,
+            successful: false,
+            earlyClick: true
+          });
+          setFeedback("bad", "<strong>Too Early!</strong> Try again. Wait for green.");
+          renderStats();
+          // Small delay before continuing the same round
+          clearWaitTimer();
+          setTimeout(() => {
+            if (state !== "done") beginWaitForGreen();
+          }, 700);
+          return;
+        }
+
+        if (state === "go") {
+          const rt = Math.max(0, Math.round(performance.now() - goAt));
+          times.push(rt);
+          successful += 1;
+          roundResults.push({
+            round: round,
+            reactionTimeMs: rt,
+            successful: true,
+            earlyClick: false
+          });
+
+          setFeedback("good", "<strong>Recorded!</strong> Reaction time: " + formatMs(rt));
+          renderStats();
+
+          if (round >= TOTAL_ROUNDS) {
+            finishTest();
+            return;
+          }
+
+          round += 1;
+          state = "wait";
+          setTimeout(() => beginWaitForGreen(), 900);
+        }
+      }
+
+      function saveNow() {
+        if (state !== "done") return;
+        if (window.webcamMonitor) window.webcamMonitor.stop();
+        saveForm.submit();
+      }
+
+      startBtn.addEventListener("click", startTest);
+      restartBtn.addEventListener("click", restartTest);
+      tapArea.addEventListener("click", onTap);
+      saveBtn.addEventListener("click", saveNow);
+      modalSave.addEventListener("click", saveNow);
+      modalRestart.addEventListener("click", () => { closeModal(); startTest(); });
+      modalBackdrop.addEventListener("click", () => closeModal());
+
+      // Initial UI
+      renderStats();
+      setTapIdle();
+    })();
+  </script>
+
+  <script src="{{ url_for('static', filename='js/webcam-monitor.js') }}"></script>
+  <script>
+    (() => {
+      const sessionId = {{ (session_id or '') | tojson }};
+      const webcamPanelEl = document.getElementById('webcam-panel');
+      if (webcamPanelEl) {
+        window.webcamMonitor = new WebcamMonitor({ containerEl: webcamPanelEl, sessionId, userName: {{ session.get("full_name", "User")|tojson }}, initialFlagCount: {{ ui_flag_count|default(0)|tojson }} });
+        window.webcamMonitor.start();
+        window.addEventListener('pagehide', () => window.webcamMonitor.stop());
+      }
+    })();
+  </script>
+<script src="{{ url_for('static', filename='js/cursor-monitor.js') }}"></script>
+<script>
+(() => {
+  const sid={{ (session_id or '')|tojson }}; const area=document.getElementById('tapArea');
+  if(!area||!window.CursorMonitor)return; const cm=new CursorMonitor(document.querySelector('.reaction-wrap')); cm.start();
+  const originalOnTap=area.onclick;
+  // Event listener sees the same click after the game's handler and records whether it was early/successful.
+  area.addEventListener('click',()=>{ if(window.__reactionTargetActive){cm.recordClick(true);window.__reactionTargetActive=false;} else {cm.recordClick(false);} });
+  const observer=new MutationObserver(()=>{ const state=document.getElementById('tapState')?.textContent||''; if(state==='GO'&&!window.__reactionTargetActive){window.__reactionTargetActive=true;cm.markTargetShown();}});
+  observer.observe(area,{subtree:true,childList:true,characterData:true});
+  const timer=setInterval(()=>{const state=document.getElementById('tapState')?.textContent||'';if(state==='GO'&&!window.__reactionTargetActive){window.__reactionTargetActive=true;cm.markTargetShown();}},100);
+  window.addEventListener('pagehide',()=>{clearInterval(timer);observer.disconnect();cm.save('Reaction Test',sid);cm.stop();});
+  window.reactionCursorMonitor=cm;
+})();
+</script>
+
+{% endblock %}
+
